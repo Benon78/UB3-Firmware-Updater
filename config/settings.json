@@ -1,0 +1,11 @@
+{
+    "theme": "light",
+
+    "auto_detect_device": true,
+
+    "auto_open_log": false,
+
+    "remember_last_firmware": true,
+
+    "check_driver_on_startup": true
+}

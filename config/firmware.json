@@ -1,0 +1,15 @@
+{
+    "default_firmware": "ZNA2US",
+
+    "available": [
+
+        {
+            "name": "ZNA2US",
+
+            "version": "1.00",
+
+            "folder": "ZNA2US"
+        }
+
+    ]
+}

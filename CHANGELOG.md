@@ -30,3 +30,13 @@ The project follows Semantic Versioning (SemVer).
 - Application entry point (`main.py`)
 - Application bootstrap (`app.py`)
 - Initial documentation
+
+## v0.2.0
+
+### Added
+- Professional src package architecture
+- Application launcher
+- Configuration Service
+- JSON configuration system
+- Firmware configuration
+- Application settings
