@@ -99,3 +99,18 @@ The project follows Semantic Versioning (SemVer).
 ### Notes
 
 The current Maple Loader workflow starts from Maple Serial mode and performs the DTR reset automatically. The operator should not manually place the UB3 into flash/bootloader mode before starting an update.
+
+### Verified - Real Hardware Integration
+
+- Completed real end-to-end `UploadService.upload()` test using a physical UB3.
+- Automatic Maple Serial detection verified.
+- Automatic COM port detection verified.
+- UB3 `VID:PID = 1EAF:0004` validation verified.
+- Maple Loader DTR reset workflow verified.
+- Maple DFU device `1EAF:003` detection verified.
+- Firmware staging to `C:\tmp` verified.
+- Real ZNA2US 1.00 firmware transfer completed successfully.
+- Maple Loader reported `Done!` after firmware download.
+- Post-upload USB reset warning correctly classified as `SUCCESS_WITH_WARNING`.
+- Real upload completed with return code `0`.
+- End-to-end upload duration observed at approximately 18.6 seconds.

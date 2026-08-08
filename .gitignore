@@ -29,3 +29,4 @@ Thumbs.db
 
 # Temporary firmware
 *.tmp
+tests/fixtures/*.bin
