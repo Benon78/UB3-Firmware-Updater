@@ -23,6 +23,7 @@ from ub3_updater.app import UB3UpdaterApp
 def main():
 
     app = QApplication(sys.argv)
+    app.setStyleSheet(STYLE)
 
     window = UB3UpdaterApp()
 

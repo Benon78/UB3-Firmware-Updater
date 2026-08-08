@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
     QLabel,
 )
 from PySide6.QtCore import Qt
-
+from ub3_updater.themes.light_theme import STYLE
 
 APP_NAME = "UB3 Firmware Updater"
 APP_VERSION = "0.1.0"
