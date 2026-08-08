@@ -10,9 +10,6 @@ Benjamin William
 Description:
 Controlled Windows process execution for the UB3 updater.
 
-This module is responsible for running external tools
-such as the Maple/Arduino firmware uploader.
-
 Responsibilities
 ----------------
 • Start an external process
@@ -31,7 +28,7 @@ This module does NOT:
 • Interpret Maple Loader output
 
 Version:
-0.5.0
+0.5.2
 =========================================================
 """
 
@@ -39,8 +36,12 @@ from __future__ import annotations
 
 import subprocess
 import threading
-from dataclasses import dataclass, field
+import time
+
+from dataclasses import dataclass
+
 from pathlib import Path
+
 from typing import Callable, Sequence
 
 
@@ -75,8 +76,12 @@ class ProcessResult:
     @property
     def success(self) -> bool:
         """
-        Return True only when the process completed
-        successfully.
+        OS-level process success.
+
+        NOTE:
+        This does NOT mean firmware upload success.
+        UploadService interprets Maple Loader output
+        separately.
         """
 
         return (
@@ -89,6 +94,9 @@ class ProcessResult:
 
     @property
     def failed(self) -> bool:
+        """
+        Return True when the process failed at OS level.
+        """
 
         return self.started and not self.success
 
@@ -99,7 +107,8 @@ class ProcessResult:
 
 class ProcessRunner:
     """
-    Controlled process runner used by the upload layer.
+    Controlled process runner used by the application
+    services.
     """
 
     def __init__(self):
@@ -141,26 +150,28 @@ class ProcessRunner:
         on_error: Callable[[str], None] | None = None,
     ) -> ProcessResult:
         """
-        Execute an external process and wait for completion.
+        Execute an external process.
 
-        Parameters
-        ----------
-        command:
-            Complete command and arguments.
+        command must be a sequence of arguments.
 
-        cwd:
-            Working directory for the process.
+        Example:
 
-        timeout:
-            Maximum execution time in seconds.
-            None means no timeout.
-
-        on_output:
-            Callback invoked for each stdout line.
-
-        on_error:
-            Callback invoked for each stderr line.
+            [
+                "cmd.exe",
+                "/d",
+                "/c",
+                "call",
+                r"C:\\tools\\maple_upload.bat",
+                "COM3",
+                "2",
+                "1EAF:003",
+                r"C:\\tmp\\firmware.bin",
+            ]
         """
+
+        # -------------------------------------------------
+        # Normalize command
+        # -------------------------------------------------
 
         command_list = [
             str(item)
@@ -168,14 +179,18 @@ class ProcessRunner:
         ]
 
         result = ProcessResult(
-            command=command_list,
+            command=command_list.copy(),
         )
 
         self._cancel_requested = False
 
-        start_time = __import__("time").monotonic()
+        start_time = time.monotonic()
 
         try:
+
+            # ---------------------------------------------
+            # Working directory
+            # ---------------------------------------------
 
             working_directory = None
 
@@ -185,9 +200,9 @@ class ProcessRunner:
                     Path(cwd).resolve()
                 )
 
-            # -----------------------------------------
-            # Windows subprocess
-            # -----------------------------------------
+            # ---------------------------------------------
+            # Windows configuration
+            # ---------------------------------------------
 
             creation_flags = 0
 
@@ -200,8 +215,11 @@ class ProcessRunner:
                     subprocess.CREATE_NO_WINDOW
                 )
 
-            process = subprocess.Popen(
+            # ---------------------------------------------
+            # Start process
+            # ---------------------------------------------
 
+            process = subprocess.Popen(
                 command_list,
 
                 cwd=working_directory,
@@ -221,6 +239,8 @@ class ProcessRunner:
                 bufsize=1,
 
                 creationflags=creation_flags,
+
+                shell=False,
             )
 
             with self._lock:
@@ -229,13 +249,17 @@ class ProcessRunner:
 
             result.started = True
 
-            # -----------------------------------------
-            # Output collection
-            # -----------------------------------------
+            # ---------------------------------------------
+            # Output buffers
+            # ---------------------------------------------
 
             stdout_lines: list[str] = []
 
             stderr_lines: list[str] = []
+
+            # ---------------------------------------------
+            # stdout reader
+            # ---------------------------------------------
 
             stdout_thread = threading.Thread(
                 target=self._read_stream,
@@ -246,6 +270,10 @@ class ProcessRunner:
                 ),
                 daemon=True,
             )
+
+            # ---------------------------------------------
+            # stderr reader
+            # ---------------------------------------------
 
             stderr_thread = threading.Thread(
                 target=self._read_stream,
@@ -261,9 +289,9 @@ class ProcessRunner:
 
             stderr_thread.start()
 
-            # -----------------------------------------
+            # ---------------------------------------------
             # Wait
-            # -----------------------------------------
+            # ---------------------------------------------
 
             try:
 
@@ -279,19 +307,31 @@ class ProcessRunner:
 
                 return_code = process.wait()
 
-            # -----------------------------------------
-            # Threads
-            # -----------------------------------------
+            # ---------------------------------------------
+            # Wait for readers
+            # ---------------------------------------------
 
-            stdout_thread.join(timeout=2)
+            stdout_thread.join(
+                timeout=2
+            )
 
-            stderr_thread.join(timeout=2)
+            stderr_thread.join(
+                timeout=2
+            )
+
+            # ---------------------------------------------
+            # Store result
+            # ---------------------------------------------
 
             result.return_code = return_code
 
-            result.stdout = "".join(stdout_lines)
+            result.stdout = "".join(
+                stdout_lines
+            )
 
-            result.stderr = "".join(stderr_lines)
+            result.stderr = "".join(
+                stderr_lines
+            )
 
             result.cancelled = (
                 self._cancel_requested
@@ -322,7 +362,7 @@ class ProcessRunner:
         finally:
 
             result.duration_seconds = (
-                __import__("time").monotonic()
+                time.monotonic()
                 - start_time
             )
 
@@ -358,11 +398,14 @@ class ProcessRunner:
             ):
 
                 if not line:
+
                     break
 
                 lines.append(line)
 
-                clean_line = line.rstrip("\r\n")
+                clean_line = (
+                    line.rstrip("\r\n")
+                )
 
                 if callback is not None:
 
@@ -379,8 +422,6 @@ class ProcessRunner:
     def cancel(self) -> bool:
         """
         Request cancellation of the running process.
-
-        Returns True when a running process was terminated.
         """
 
         self._cancel_requested = True
@@ -392,6 +433,9 @@ class ProcessRunner:
     # =====================================================
 
     def _terminate_process(self) -> bool:
+        """
+        Terminate the current process.
+        """
 
         with self._lock:
 
@@ -411,13 +455,17 @@ class ProcessRunner:
 
             try:
 
-                process.wait(timeout=2)
+                process.wait(
+                    timeout=2
+                )
 
             except subprocess.TimeoutExpired:
 
                 process.kill()
 
-                process.wait(timeout=2)
+                process.wait(
+                    timeout=2
+                )
 
             return True
 

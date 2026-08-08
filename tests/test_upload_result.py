@@ -96,3 +96,61 @@ print(
 
 print()
 print("=" * 70)
+
+# =========================================================
+# TEST 5 - Serialization round trip
+# =========================================================
+
+original = UploadResult.success_with_warning_result(
+    message="Firmware programmed successfully.",
+    warning=(
+        "USB reset after download could not "
+        "be completed automatically."
+    ),
+    firmware_name="ZNA2US",
+    firmware_version="1.00",
+    com_port="COM3",
+    duration_seconds=18.469,
+)
+
+data = original.to_dict()
+
+restored = UploadResult.from_dict(
+    data
+)
+
+print()
+print("SERIALIZATION")
+
+print("Original :", original.status)
+print("Restored :", restored.status)
+
+print(
+    "Firmware :",
+    restored.firmware_name
+)
+
+print(
+    "Version  :",
+    restored.firmware_version
+)
+
+print(
+    "COM Port :",
+    restored.com_port
+)
+
+print(
+    "Warning  :",
+    restored.warning
+)
+
+print(
+    "Success  :",
+    restored.success
+)
+
+print(
+    "Has Warn :",
+    restored.has_warning
+)

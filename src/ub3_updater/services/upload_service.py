@@ -6,48 +6,1086 @@ Upload Service
 
 Developer:
 Benjamin William
+
+Description:
+Coordinates firmware uploads using the proven Maple
+Loader workflow.
+
+Proven manual command:
+
+    maple_upload COM3 2 1EAF:003 C:\\tmp\\firmware.bin
+
+Important device logic:
+
+    Maple Serial
+        -> valid starting state for firmware update
+
+    USB Serial Device
+        -> bootloader/flash state
+        -> NOT a valid starting state
+
+The COM port is detected automatically by DeviceService.
+The user does not manually select COM3/COM7.
+
+Version:
+0.5.5
 =========================================================
 """
 
-import subprocess
+from __future__ import annotations
+
+import shutil
+
+from datetime import datetime
+
 from pathlib import Path
 
-from ub3_updater.services.serial_service import SerialService
-from ub3_updater.services.dfu_service import DFUService
+from typing import Callable
+
+
+from ub3_updater.models.device import (
+    Device,
+    DeviceState,
+)
+
+from ub3_updater.models.firmware import (
+    Firmware,
+)
+
+from ub3_updater.models.upload_result import (
+    UploadResult,
+    UploadStatus,
+)
+
+from ub3_updater.services.device_service import (
+    DeviceService,
+)
+
+from ub3_updater.services.firmware_service import (
+    FirmwareService,
+)
+
+from ub3_updater.utils.process_runner import (
+    ProcessResult,
+    ProcessRunner,
+)
 
 
 class UploadService:
+    """
+    Firmware upload orchestration service.
 
-    def __init__(self):
+    Responsibilities
+    ----------------
+    1. Validate firmware.
+    2. Freshly detect the connected UB3.
+    3. Verify the UB3 is in Maple Serial mode.
+    4. Automatically obtain the current COM port.
+    5. Prepare firmware for Maple Loader.
+    6. Build the Maple Loader command.
+    7. Execute the upload process.
+    8. Interpret Maple Loader output.
+    9. Return UploadResult.
 
-        self.serial = SerialService()
+    This service does NOT:
+    - Detect devices continuously.
+    - Control the GUI.
+    - Manually select COM ports.
+    - Put the UB3 into bootloader mode itself.
+    """
 
-        self.dfu = DFUService()
+    # =====================================================
+    # Maple Loader Configuration
+    # =====================================================
 
-    # ---------------------------------------------------
+    # Maple DFU alternate interface.
+    MAPLE_ALT_ID = "2"
 
-    def upload(self, com_port, firmware_path):
+    # Maple DFU VID:PID.
+    MAPLE_DFU_ID = "1EAF:003"
 
+    # =====================================================
+    # Default Uploader
+    # =====================================================
+
+    DEFAULT_UPLOADER = Path(
+        "resources/tools/maple_upload.bat"
+    )
+
+    # =====================================================
+    # Temporary Firmware Directory
+    # =====================================================
+
+    # This follows the proven manual workflow.
+    TEMP_FIRMWARE_DIR = Path(
+        r"C:\tmp"
+    )
+
+    # =====================================================
+    # Upload Timeout
+    # =====================================================
+
+    DEFAULT_TIMEOUT = 120
+
+    # =====================================================
+    # Maple Success Markers
+    # =====================================================
+
+    MAPLE_SUCCESS_MARKERS = (
+        "Done!",
+        "Resetting USB to switch back to runtime mode",
+    )
+
+    # =====================================================
+    # Maple Fatal Failure Markers
+    # =====================================================
+
+    MAPLE_FATAL_FAILURE_MARKERS = (
+        "Exception in thread",
+        "ArrayIndexOutOfBoundsException",
+        "Starting download failed",
+        "Download failed",
+        "No DFU device found",
+        "Could not find DFU device",
+        "Could not open USB device",
+        "Unable to open USB device",
+        "No such file or directory",
+    )
+
+    # =====================================================
+    # Initialization
+    # =====================================================
+
+    def __init__(
+        self,
+        device_service: DeviceService | None = None,
+        firmware_service: FirmwareService | None = None,
+        process_runner: ProcessRunner | None = None,
+        device_monitor=None,
+        uploader_path: str | Path | None = None,
+        timeout: float | None = None,
+    ):
         """
-        Complete firmware upload sequence.
+        Initialize UploadService.
         """
 
-        # Step 1
-
-        if not self.serial.reset_to_bootloader(com_port):
-
-            return False, "Failed to reset UB3."
-
-        # Step 2
-
-        if not self.dfu.wait_for_device():
-
-            return False, "DFU device not detected."
-
-        # Step 3
-
-        success, message = self.dfu.flash_firmware(
-            firmware_path
+        self.device_service = (
+            device_service
+            if device_service is not None
+            else DeviceService()
         )
 
-        return success, message
+        self.firmware_service = (
+            firmware_service
+            if firmware_service is not None
+            else FirmwareService()
+        )
+
+        self.process_runner = (
+            process_runner
+            if process_runner is not None
+            else ProcessRunner()
+        )
+
+        self.device_monitor = device_monitor
+
+        self.uploader_path = Path(
+            uploader_path
+            if uploader_path is not None
+            else self.DEFAULT_UPLOADER
+        )
+
+        self.timeout = (
+            timeout
+            if timeout is not None
+            else self.DEFAULT_TIMEOUT
+        )
+
+    # =====================================================
+    # Upload
+    # =====================================================
+
+    def upload(
+        self,
+        firmware: Firmware,
+        *,
+        on_output: Callable[[str], None] | None = None,
+        on_error: Callable[[str], None] | None = None,
+    ) -> UploadResult:
+        """
+        Perform a firmware upload.
+
+        IMPORTANT:
+        A fresh device scan is performed immediately before
+        every upload.
+
+        This prevents a stale COM port from being used after
+        the UB3 has been disconnected/reconnected.
+        """
+
+        started_at = datetime.now()
+
+        # =================================================
+        # 1. Validate firmware
+        # =================================================
+
+        if firmware is None:
+
+            return UploadResult.firmware_invalid(
+                "No firmware was selected."
+            )
+
+        valid, error = (
+            self.firmware_service.validate(
+                firmware
+            )
+        )
+
+        if not valid:
+
+            return UploadResult.firmware_invalid(
+                error,
+                firmware_name=firmware.name,
+                firmware_version=firmware.version,
+                firmware_path=firmware.path,
+            )
+
+        # =================================================
+        # 2. FRESHLY DETECT CURRENT UB3
+        # =================================================
+
+        """
+        Do NOT use:
+
+            get_current_device()
+
+        as the primary source here.
+
+        The COM port may have changed since the previous
+        detection.
+
+        Example:
+
+            Previous:
+                Maple Serial -> COM3
+
+            Disconnect
+
+            Reconnect:
+                Maple Serial -> COM7
+
+        The upload must use COM7.
+
+        Therefore every upload performs a fresh scan.
+        """
+
+        device = self.device_service.scan()
+
+        # =================================================
+        # 3. Validate freshly detected device
+        # =================================================
+
+        validation_error = (
+            self._validate_device(device)
+        )
+
+        if validation_error:
+
+            return UploadResult.device_not_ready(
+                validation_error,
+                firmware_name=firmware.name,
+                firmware_version=firmware.version,
+                firmware_path=firmware.path,
+                com_port=(
+                    device.com_port
+                    if device is not None
+                    else ""
+                ),
+                device_state=self._state_value(
+                    device
+                ),
+            )
+
+        # =================================================
+        # 4. Validate uploader
+        # =================================================
+
+        uploader_error = (
+            self._validate_uploader()
+        )
+
+        if uploader_error:
+
+            return UploadResult.process_error(
+                uploader_error,
+                firmware_name=firmware.name,
+                firmware_version=firmware.version,
+                firmware_path=firmware.path,
+                com_port=device.com_port,
+                device_state=self._state_value(
+                    device
+                ),
+            )
+
+        # =================================================
+        # 5. Build command
+        # =================================================
+
+        try:
+
+            command = self.build_command(
+                device=device,
+                firmware=firmware,
+            )
+
+        except FileNotFoundError as exc:
+
+            return UploadResult.process_error(
+                str(exc),
+                firmware_name=firmware.name,
+                firmware_version=firmware.version,
+                firmware_path=firmware.path,
+                com_port=device.com_port,
+                device_state=self._state_value(
+                    device
+                ),
+            )
+
+        except OSError as exc:
+
+            return UploadResult.process_error(
+                (
+                    "Unable to prepare firmware for "
+                    f"upload: {exc}"
+                ),
+                firmware_name=firmware.name,
+                firmware_version=firmware.version,
+                firmware_path=firmware.path,
+                com_port=device.com_port,
+                device_state=self._state_value(
+                    device
+                ),
+            )
+
+        except ValueError as exc:
+
+            return UploadResult.process_error(
+                str(exc),
+                firmware_name=firmware.name,
+                firmware_version=firmware.version,
+                firmware_path=firmware.path,
+                com_port=device.com_port,
+                device_state=self._state_value(
+                    device
+                ),
+            )
+
+        # =================================================
+        # 6. Pause DeviceMonitor
+        # =================================================
+
+        self._pause_monitor()
+
+        try:
+
+            process_result = (
+                self.process_runner.run(
+                    command,
+                    cwd=self.uploader_path.parent,
+                    timeout=self.timeout,
+                    on_output=on_output,
+                    on_error=on_error,
+                )
+            )
+
+        finally:
+
+            # Always restore monitoring.
+            self._resume_monitor()
+
+        # =================================================
+        # 7. Build UploadResult
+        # =================================================
+
+        return self._build_upload_result(
+            process_result=process_result,
+            firmware=firmware,
+            device=device,
+            started_at=started_at,
+        )
+
+    # =====================================================
+    # Prepare Firmware
+    # =====================================================
+
+    def _prepare_firmware(
+        self,
+        firmware: Firmware,
+    ) -> Path:
+        """
+        Copy selected firmware into C:\\tmp.
+
+        This follows the proven manual Maple workflow.
+        """
+
+        if firmware is None:
+
+            raise ValueError(
+                "Firmware is required."
+            )
+
+        if not firmware.path:
+
+            raise ValueError(
+                "Firmware path is required."
+            )
+
+        source = Path(
+            firmware.path
+        ).resolve()
+
+        # -------------------------------------------------
+        # Validate source
+        # -------------------------------------------------
+
+        if not source.exists():
+
+            raise FileNotFoundError(
+                "Firmware file not found: "
+                f"{source}"
+            )
+
+        if not source.is_file():
+
+            raise OSError(
+                "Firmware path is not a file: "
+                f"{source}"
+            )
+
+        # -------------------------------------------------
+        # Create temporary directory
+        # -------------------------------------------------
+
+        self.TEMP_FIRMWARE_DIR.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        # -------------------------------------------------
+        # Destination
+        # -------------------------------------------------
+
+        destination = (
+            self.TEMP_FIRMWARE_DIR
+            / source.name
+        )
+
+        # -------------------------------------------------
+        # Copy
+        # -------------------------------------------------
+
+        shutil.copy2(
+            source,
+            destination,
+        )
+
+        return destination
+
+    # =====================================================
+    # Build Command
+    # =====================================================
+
+    def build_command(
+        self,
+        device: Device,
+        firmware: Firmware,
+    ) -> list[str]:
+        """
+        Build the Maple Loader command.
+
+        Proven manual command:
+
+            maple_upload COM3 2 1EAF:003 C:\\tmp\\firmware.bin
+
+        Application representation:
+
+            [0] cmd.exe
+            [1] /d
+            [2] /c
+            [3] call
+            [4] maple_upload.bat
+            [5] COM3
+            [6] 2
+            [7] 1EAF:003
+            [8] C:\\tmp\\firmware.bin
+
+        COM port is obtained from the freshly detected
+        Device object.
+        """
+
+        # -------------------------------------------------
+        # Validate device
+        # -------------------------------------------------
+
+        if device is None:
+
+            raise ValueError(
+                "Device is required."
+            )
+
+        if not device.com_port:
+
+            raise ValueError(
+                "Device COM port is required."
+            )
+
+        # -------------------------------------------------
+        # Validate firmware
+        # -------------------------------------------------
+
+        if firmware is None:
+
+            raise ValueError(
+                "Firmware is required."
+            )
+
+        if not firmware.path:
+
+            raise ValueError(
+                "Firmware path is required."
+            )
+
+        # -------------------------------------------------
+        # Prepare firmware
+        # -------------------------------------------------
+
+        upload_firmware = (
+            self._prepare_firmware(
+                firmware
+            )
+        )
+
+        # -------------------------------------------------
+        # Resolve uploader
+        # -------------------------------------------------
+
+        uploader = (
+            self.uploader_path.resolve()
+        )
+
+        if not uploader.exists():
+
+            raise FileNotFoundError(
+                "Maple uploader not found: "
+                f"{uploader}"
+            )
+
+        if not uploader.is_file():
+
+            raise OSError(
+                "Maple uploader path is not a file: "
+                f"{uploader}"
+            )
+
+        # -------------------------------------------------
+        # Build Windows argument list
+        # -------------------------------------------------
+
+        return [
+            "cmd.exe",
+            "/d",
+            "/c",
+            "call",
+            str(uploader),
+            device.com_port,
+            self.MAPLE_ALT_ID,
+            self.MAPLE_DFU_ID,
+            str(upload_firmware),
+        ]
+
+    # =====================================================
+    # Device Validation
+    # =====================================================
+
+    @staticmethod
+    def _validate_device(
+        device: Device | None,
+    ) -> str | None:
+        """
+        Validate that the freshly detected device is ready.
+
+        Valid starting state:
+
+            Maple Serial
+
+        Invalid starting state:
+
+            USB Serial Device
+        """
+
+        # -------------------------------------------------
+        # No device
+        # -------------------------------------------------
+
+        if device is None:
+
+            return (
+                "No UB3 device detected."
+            )
+
+        # -------------------------------------------------
+        # Disconnected
+        # -------------------------------------------------
+
+        if not device.connected:
+
+            return (
+                "No UB3 device is connected."
+            )
+
+        # -------------------------------------------------
+        # Maple Serial
+        # -------------------------------------------------
+
+        if device.state == DeviceState.MAPLE_SERIAL:
+
+            if not device.com_port:
+
+                return (
+                    "UB3 COM port could not be determined."
+                )
+
+            return None
+
+        # -------------------------------------------------
+        # USB Serial / Bootloader
+        # -------------------------------------------------
+
+        if device.state == DeviceState.USB_SERIAL:
+
+            return (
+                "UB3 is in flash/bootloader mode. "
+                "Firmware update must start from "
+                "Maple Serial mode."
+            )
+
+        # -------------------------------------------------
+        # Unknown state
+        # -------------------------------------------------
+
+        return (
+            "UB3 is not in Maple Serial mode."
+        )
+
+    # =====================================================
+    # Uploader Validation
+    # =====================================================
+
+    def _validate_uploader(self) -> str | None:
+        """
+        Verify maple_upload.bat exists.
+        """
+
+        if not self.uploader_path.exists():
+
+            return (
+                "Maple uploader was not found: "
+                f"{self.uploader_path}"
+            )
+
+        if not self.uploader_path.is_file():
+
+            return (
+                "Maple uploader path is not a file: "
+                f"{self.uploader_path}"
+            )
+
+        return None
+
+    # =====================================================
+    # Device Monitor Pause
+    # =====================================================
+
+    def _pause_monitor(self) -> None:
+        """
+        Pause DeviceMonitor while Maple Loader is operating.
+        """
+
+        if self.device_monitor is None:
+
+            return
+
+        pause = getattr(
+            self.device_monitor,
+            "pause",
+            None,
+        )
+
+        if callable(pause):
+
+            pause()
+
+    # =====================================================
+    # Device Monitor Resume
+    # =====================================================
+
+    def _resume_monitor(self) -> None:
+        """
+        Resume DeviceMonitor after Maple Loader finishes.
+        """
+
+        if self.device_monitor is None:
+
+            return
+
+        resume = getattr(
+            self.device_monitor,
+            "resume",
+            None,
+        )
+
+        if callable(resume):
+
+            resume()
+
+    # =====================================================
+    # Build Upload Result
+    # =====================================================
+
+    def _build_upload_result(
+        self,
+        process_result: ProcessResult,
+        firmware: Firmware,
+        device: Device,
+        started_at: datetime,
+    ) -> UploadResult:
+        """
+        Convert ProcessResult into UploadResult.
+
+        Maple Loader output is interpreted separately from
+        the operating-system process result.
+        """
+
+        completed_at = datetime.now()
+
+        common = {
+            "firmware_name": firmware.name,
+            "firmware_version": firmware.version,
+            "firmware_path": firmware.path,
+            "com_port": device.com_port,
+            "device_state": self._state_value(device),
+            "command": process_result.command,
+            "return_code": process_result.return_code,
+            "stdout": process_result.stdout,
+            "stderr": process_result.stderr,
+            "started": process_result.started,
+            "started_at": started_at,
+            "completed_at": completed_at,
+            "duration_seconds": (
+                process_result.duration_seconds
+            ),
+        }
+
+        # =================================================
+        # Cancelled
+        # =================================================
+
+        if process_result.cancelled:
+
+            return UploadResult.cancelled_result(
+                "Firmware upload was cancelled.",
+                **common,
+            )
+
+        # =================================================
+        # Timeout
+        # =================================================
+
+        if process_result.timed_out:
+
+            return UploadResult.timeout_result(
+                (
+                    "Firmware upload exceeded the "
+                    f"{self.timeout}-second timeout."
+                ),
+                **common,
+            )
+
+        # =================================================
+        # Process startup error
+        # =================================================
+
+        if process_result.error:
+
+            return UploadResult.process_error(
+                process_result.error,
+                **common,
+            )
+
+        # =================================================
+        # Interpret Maple Loader
+        # =================================================
+
+        status, message, warning = (
+            self._evaluate_maple_result(
+                process_result
+            )
+        )
+
+        # =================================================
+        # Successful upload
+        # =================================================
+
+        if status == UploadStatus.SUCCESS:
+
+            return UploadResult.success_result(
+                message=message,
+                **common,
+            )
+
+        # =================================================
+        # Successful upload with warning
+        # =================================================
+
+        if (
+            status
+            == UploadStatus.SUCCESS_WITH_WARNING
+        ):
+
+            return UploadResult.success_with_warning_result(
+                message=message,
+                warning=warning,
+                **common,
+            )
+
+        # =================================================
+        # Failure
+        # =================================================
+
+        return UploadResult.failed_result(
+            message,
+            **common,
+        )
+
+
+    # =====================================================
+    # Maple Result Evaluation
+    # =====================================================
+
+    def _evaluate_maple_result(
+        self,
+        process_result: ProcessResult,
+    ) -> tuple[UploadStatus, str, str]:
+        """
+        Interpret Maple Loader output.
+
+        Returns
+        -------
+        tuple
+            (
+                status,
+                message,
+                warning
+            )
+
+        Important:
+        ----------
+        Process return code 0 alone is NOT enough.
+
+        Maple Loader can return 0 while reporting a Java
+        exception or another fatal failure.
+
+        Likewise, a USB reset error occurring AFTER
+        "Done!" does not mean the firmware transfer failed.
+        """
+
+        stdout = (
+            process_result.stdout
+            or ""
+        )
+
+        stderr = (
+            process_result.stderr
+            or ""
+        )
+
+        output = (
+            stdout
+            + "\n"
+            + stderr
+        )
+
+        output_lower = (
+            output.lower()
+        )
+
+        # =================================================
+        # 1. Fatal failure detection
+        # =================================================
+
+        for marker in (
+            self.MAPLE_FATAL_FAILURE_MARKERS
+        ):
+
+            if marker.lower() in output_lower:
+
+                return (
+                    UploadStatus.FAILED,
+
+                    (
+                        "Maple Loader reported a fatal "
+                        f"failure: {marker}"
+                    ),
+
+                    "",
+                )
+
+        # =================================================
+        # 2. Detect successful firmware transfer
+        # =================================================
+
+        download_finished = (
+            "starting download:"
+            in output_lower
+            and "finished!"
+            in output_lower
+        )
+
+        done_found = (
+            "done!"
+            in output_lower
+        )
+
+        # =================================================
+        # 3. Detect post-upload reset warning
+        # =================================================
+
+        reset_warning = (
+            "error resetting after download"
+            in output_lower
+            or
+            "usb_reset:"
+            in output_lower
+            or
+            "could not reset device"
+            in output_lower
+        )
+
+        # =================================================
+        # 4. Successful transfer
+        # =================================================
+
+        if download_finished and done_found:
+
+            # -------------------------------------------------
+            # Successful transfer + reset warning
+            # -------------------------------------------------
+
+            if reset_warning:
+
+                return (
+                    UploadStatus.SUCCESS_WITH_WARNING,
+
+                    (
+                        "Firmware was programmed successfully."
+                    ),
+
+                    (
+                        "Firmware programming completed, "
+                        "but Maple Loader reported a USB "
+                        "reset warning after the download. "
+                        "The UB3 may require reconnection."
+                    ),
+                )
+
+            # -------------------------------------------------
+            # Completely successful
+            # -------------------------------------------------
+
+            return (
+                UploadStatus.SUCCESS,
+
+                (
+                    "Firmware upload completed successfully."
+                ),
+
+                "",
+            )
+
+        # =================================================
+        # 5. Non-zero process exit
+        # =================================================
+
+        if process_result.return_code not in (
+            None,
+            0,
+        ):
+
+            message = (
+                "Maple firmware uploader failed "
+                f"with exit code "
+                f"{process_result.return_code}."
+            )
+
+            if stderr.strip():
+
+                message = stderr.strip()
+
+            return (
+                UploadStatus.FAILED,
+                message,
+                "",
+            )
+
+        # =================================================
+        # 6. No confirmed success
+        # =================================================
+
+        return (
+            UploadStatus.FAILED,
+
+            (
+                "Maple Loader did not report a confirmed "
+                "successful firmware update."
+            ),
+
+            "",
+        )
+
+    #=========================
+    # Cancel Upload
+    # =====================================================
+
+    def cancel(self) -> bool:
+        """
+        Cancel the active upload process.
+        """
+
+        return self.process_runner.cancel()
+
+    # =====================================================
+    # State Helper
+    # =====================================================
+
+    @staticmethod
+    def _state_value(
+        device: Device | None,
+    ) -> str:
+        """
+        Convert DeviceState to a string.
+        """
+
+        if device is None:
+
+            return ""
+
+        state = device.state
+
+        if hasattr(
+            state,
+            "value",
+        ):
+
+            return state.value
+
+        return str(state)

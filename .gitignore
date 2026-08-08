@@ -26,3 +26,6 @@ logs/
 # OS
 Thumbs.db
 .DS_Store
+
+# Temporary firmware
+*.tmp
