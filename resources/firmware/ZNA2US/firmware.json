@@ -1,0 +1,8 @@
+{
+    "name": "ZNA2US",
+    "version": "1.00",
+    "hardware": "UB3",
+    "country": "Tanzania",
+    "file": "UnlockBoxIII_260123_ZNA2US-WWDG2d_1.00.ino.generic_stm32f103r.bin",
+    "description": "UB3 ZNA2US Production Firmware"
+}

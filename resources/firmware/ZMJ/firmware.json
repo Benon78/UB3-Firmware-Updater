@@ -1,0 +1,8 @@
+{
+    "name": "ZMJ",
+    "version": "1.00",
+    "hardware": "UB3",
+    "country": "Tanzania",
+    "file": "UnlockBoxIII_220806ZMJ_Both(WiredAndIR)_Masked.ino.bin",
+    "description": "UB3 ZMJ Production Firmware"
+}
