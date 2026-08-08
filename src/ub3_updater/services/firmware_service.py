@@ -8,35 +8,37 @@ Developer:
 Benjamin William
 
 Description:
-Discovers, validates, and manages firmware packages
-available to the UB3 Firmware Updater.
+Discovers and validates firmware packages stored in the
+local firmware repository.
 
 Responsibilities
 ----------------
-• Discover firmware files
-• Build Firmware models
-• Validate firmware files
-• Calculate firmware checksums
+• Discover firmware packages
+• Read firmware.json metadata
+• Locate firmware binaries
+• Validate firmware packages
+• Detect duplicate firmware names
+• Calculate checksums
 • Find firmware by name/version
 • Provide the default firmware
 
-This service NEVER:
-• Connects to the UB3
-• Executes maple_upload.exe
-• Controls the DeviceMonitor
-• Updates the GUI
-
-The actual maple_upload command is handled later by
-UploadService.
+This service does NOT:
+• Upload firmware
+• Communicate with USB devices
+• Execute external processes
+• Control the GUI
 
 Version:
-0.4.0
+0.5.0
 =========================================================
 """
 
 from __future__ import annotations
 
 import hashlib
+import json
+import re
+
 from pathlib import Path
 
 from ub3_updater.models.firmware import Firmware
@@ -48,85 +50,119 @@ class FirmwareService:
     # Configuration
     # =====================================================
 
-    DEFAULT_FIRMWARE_ROOT = Path("resources/firmware")
+    DEFAULT_FIRMWARE_ROOT = Path(
+        "resources/firmware"
+    )
+
+    METADATA_FILENAME = "firmware.json"
 
     SUPPORTED_EXTENSIONS = {
         ".bin",
     }
 
+    DEFAULT_FIRMWARE_NAME = "ZNA2US"
+
     # =====================================================
     # Initialization
     # =====================================================
 
-    def __init__(self, firmware_root: str | Path | None = None):
+    def __init__(
+        self,
+        firmware_root: str | Path | None = None,
+    ):
 
         if firmware_root is None:
-            firmware_root = self.DEFAULT_FIRMWARE_ROOT
 
-        self.firmware_root = Path(firmware_root)
+            firmware_root = (
+                self.DEFAULT_FIRMWARE_ROOT
+            )
+
+        self.firmware_root = Path(
+            firmware_root
+        )
 
         self._firmwares: list[Firmware] = []
 
+        self._errors: list[str] = []
+
     # =====================================================
-    # Public API
+    # Discovery
     # =====================================================
 
     def scan(self) -> list[Firmware]:
         """
-        Discover all supported firmware files.
+        Discover firmware packages.
 
-        Firmware files are searched recursively under the
-        configured firmware root directory.
+        Each firmware package must have a dedicated
+        directory containing firmware.json and a .bin file.
         """
 
         self._firmwares = []
 
+        self._errors = []
+
         if not self.firmware_root.exists():
+
+            self._errors.append(
+                "Firmware repository does not exist: "
+                f"{self.firmware_root}"
+            )
+
             return []
 
         if not self.firmware_root.is_dir():
+
+            self._errors.append(
+                "Firmware repository is not a directory: "
+                f"{self.firmware_root}"
+            )
+
             return []
 
-        for file_path in sorted(
-            self.firmware_root.rglob("*")
-        ):
+        package_directories = sorted(
+            path
+            for path in self.firmware_root.iterdir()
+            if path.is_dir()
+        )
 
-            if not file_path.is_file():
-                continue
+        for package_directory in package_directories:
 
-            if file_path.suffix.lower() not in self.SUPPORTED_EXTENSIONS:
-                continue
-
-            firmware = self._build_firmware(file_path)
+            firmware = self._load_package(
+                package_directory
+            )
 
             if firmware is not None:
-                self._firmwares.append(firmware)
+
+                self._firmwares.append(
+                    firmware
+                )
+
+        self._remove_duplicates()
 
         return list(self._firmwares)
 
     # =====================================================
+    # Repository Information
+    # =====================================================
 
     def get_all(self) -> list[Firmware]:
-        """
-        Return the currently discovered firmware list.
-
-        If scan() has not been called yet, perform a scan.
-        """
 
         if not self._firmwares:
+
             return self.scan()
 
         return list(self._firmwares)
 
-    # =====================================================
-
     def refresh(self) -> list[Firmware]:
-        """
-        Force a new firmware discovery scan.
-        """
 
         return self.scan()
 
+    def get_errors(self) -> list[str]:
+
+        return list(self._errors)
+
+    # =====================================================
+    # Find
     # =====================================================
 
     def find(
@@ -134,20 +170,19 @@ class FirmwareService:
         name: str,
         version: str | None = None,
     ) -> Firmware | None:
-        """
-        Find firmware by name and optionally version.
-        """
 
-        firmwares = self.get_all()
+        for firmware in self.get_all():
 
-        for firmware in firmwares:
-
-            if firmware.name.lower() != name.lower():
+            if (
+                firmware.name.lower()
+                != name.lower()
+            ):
                 continue
 
             if version is not None:
 
                 if firmware.version != version:
+
                     continue
 
             return firmware
@@ -157,87 +192,404 @@ class FirmwareService:
     # =====================================================
 
     def get_default(self) -> Firmware | None:
-        """
-        Return the configured default firmware.
 
-        The current project uses ZNA2US as the default
-        firmware package.
-        """
-
-        firmware = self.find("ZNA2US")
+        firmware = self.find(
+            self.DEFAULT_FIRMWARE_NAME
+        )
 
         if firmware is not None:
+
             return firmware
 
         firmwares = self.get_all()
 
         if not firmwares:
+
             return None
 
         return firmwares[0]
 
     # =====================================================
+    # Validation
+    # =====================================================
 
-    def validate(self, firmware: Firmware) -> tuple[bool, str]:
-        """
-        Validate a firmware package before uploading.
-
-        Returns:
-            (True, "") when valid.
-
-            (False, "reason") when invalid.
-        """
+    def validate(
+        self,
+        firmware: Firmware,
+    ) -> tuple[bool, str]:
 
         if firmware is None:
+
             return False, "No firmware selected."
 
+        if not firmware.name:
+
+            return False, "Firmware name is missing."
+
+        if not firmware.version:
+
+            return False, "Firmware version is missing."
+
         if not firmware.path:
-            return False, "Firmware path is empty."
 
-        file_path = Path(firmware.path)
+            return False, "Firmware path is missing."
 
-        if not file_path.exists():
+        firmware_path = Path(
+            firmware.path
+        )
+
+        if not firmware_path.exists():
+
             return False, (
-                f"Firmware file does not exist: {file_path}"
+                "Firmware file does not exist: "
+                f"{firmware_path}"
             )
 
-        if not file_path.is_file():
+        if not firmware_path.is_file():
+
             return False, (
-                f"Firmware path is not a file: {file_path}"
+                "Firmware path is not a file: "
+                f"{firmware_path}"
             )
 
-        if file_path.suffix.lower() not in self.SUPPORTED_EXTENSIONS:
+        if (
+            firmware_path.suffix.lower()
+            not in self.SUPPORTED_EXTENSIONS
+        ):
+
             return False, (
-                f"Unsupported firmware format: "
-                f"{file_path.suffix}"
+                "Unsupported firmware file type: "
+                f"{firmware_path.suffix}"
             )
 
-        if file_path.stat().st_size == 0:
+        if firmware_path.stat().st_size <= 0:
+
             return False, "Firmware file is empty."
+
+        if firmware.target_device:
+
+            if firmware.target_device.upper() != "UB3":
+
+                return False, (
+                    "Firmware target device is not UB3: "
+                    f"{firmware.target_device}"
+                )
 
         return True, ""
 
+    # =====================================================
+    # Package Loading
+    # =====================================================
+
+    def _load_package(
+        self,
+        package_directory: Path,
+    ) -> Firmware | None:
+
+        metadata_path = (
+            package_directory
+            / self.METADATA_FILENAME
+        )
+
+        if not metadata_path.is_file():
+
+            self._errors.append(
+                "Missing firmware metadata: "
+                f"{metadata_path}"
+            )
+
+            return None
+
+        try:
+
+            metadata = self._read_metadata(
+                metadata_path
+            )
+
+        except (OSError, json.JSONDecodeError) as exc:
+
+            self._errors.append(
+                "Unable to read firmware metadata "
+                f"{metadata_path}: {exc}"
+            )
+
+            return None
+
+        firmware_path = self._resolve_binary(
+            package_directory,
+            metadata,
+        )
+
+        if firmware_path is None:
+
+            self._errors.append(
+                "No firmware .bin file found in: "
+                f"{package_directory}"
+            )
+
+            return None
+
+        firmware = Firmware(
+
+            name=str(
+                metadata.get(
+                    "name",
+                    package_directory.name,
+                )
+            ).strip(),
+
+            version=str(
+                metadata.get(
+                    "version",
+                    "",
+                )
+            ).strip(),
+
+            release_date=str(
+                metadata.get(
+                    "release_date",
+                    "",
+                )
+            ).strip(),
+
+            description=str(
+                metadata.get(
+                    "description",
+                    "",
+                )
+            ).strip(),
+
+            target_device=str(
+                metadata.get(
+                    "target_device",
+                    metadata.get(
+                        "hardware",
+                        "",
+                    ),
+                )
+            ).strip(),
+
+            hardware=str(
+                metadata.get(
+                    "hardware",
+                    "",
+                )
+            ).strip(),
+
+            filename=firmware_path.name,
+
+            path=str(
+                firmware_path.resolve()
+            ),
+
+            metadata_path=str(
+                metadata_path.resolve()
+            ),
+
+            size=firmware_path.stat().st_size,
+
+            checksum=str(
+                metadata.get(
+                    "checksum",
+                    "",
+                )
+            ).strip(),
+
+            checksum_algorithm=str(
+                metadata.get(
+                    "checksum_algorithm",
+                    "SHA256",
+                )
+            ).strip(),
+
+        )
+
+        valid, error = self.validate(
+            firmware
+        )
+
+        if not valid:
+
+            self._errors.append(
+                f"{firmware.display_name}: {error}"
+            )
+
+            return None
+
+        return firmware
+
+    # =====================================================
+    # Metadata
+    # =====================================================
+
+    @staticmethod
+    def _read_metadata(
+        metadata_path: Path,
+    ) -> dict:
+
+        with metadata_path.open(
+            "r",
+            encoding="utf-8",
+        ) as file:
+
+            data = json.load(file)
+
+        if not isinstance(data, dict):
+
+            raise ValueError(
+                "Firmware metadata must be a JSON object."
+            )
+
+        return data
+
+    # =====================================================
+    # Binary Resolution
+    # =====================================================
+
+    def _resolve_binary(
+        self,
+        package_directory: Path,
+        metadata: dict,
+    ) -> Path | None:
+
+        # ---------------------------------------------
+        # Preferred: explicit file in metadata
+        # ---------------------------------------------
+
+        filename = metadata.get("file")
+
+        if filename:
+
+            candidate = (
+                package_directory
+                / str(filename)
+            )
+
+            if (
+                candidate.is_file()
+                and candidate.suffix.lower()
+                in self.SUPPORTED_EXTENSIONS
+            ):
+
+                return candidate
+
+        # ---------------------------------------------
+        # Alternative metadata key
+        # ---------------------------------------------
+
+        filename = metadata.get("filename")
+
+        if filename:
+
+            candidate = (
+                package_directory
+                / str(filename)
+            )
+
+            if (
+                candidate.is_file()
+                and candidate.suffix.lower()
+                in self.SUPPORTED_EXTENSIONS
+            ):
+
+                return candidate
+
+        # ---------------------------------------------
+        # Fallback: exactly one .bin
+        # ---------------------------------------------
+
+        binaries = sorted(
+            path
+            for path in package_directory.iterdir()
+            if (
+                path.is_file()
+                and path.suffix.lower()
+                in self.SUPPORTED_EXTENSIONS
+            )
+        )
+
+        if len(binaries) == 1:
+
+            return binaries[0]
+
+        if len(binaries) > 1:
+
+            self._errors.append(
+                "Multiple firmware binaries found "
+                f"without an explicit file entry: "
+                f"{package_directory}"
+            )
+
+        return None
+
+    # =====================================================
+    # Duplicate Detection
+    # =====================================================
+
+    def _remove_duplicates(self) -> None:
+
+        unique: dict[
+            tuple[str, str],
+            Firmware,
+        ] = {}
+
+        for firmware in self._firmwares:
+
+            key = (
+                firmware.name.lower(),
+                firmware.version,
+            )
+
+            if key in unique:
+
+                self._errors.append(
+                    "Duplicate firmware detected: "
+                    f"{firmware.display_name}"
+                )
+
+                continue
+
+            unique[key] = firmware
+
+        self._firmwares = list(
+            unique.values()
+        )
+
+    # =====================================================
+    # Checksum
     # =====================================================
 
     def calculate_checksum(
         self,
         firmware: Firmware,
     ) -> str:
-        """
-        Calculate SHA-256 checksum for a firmware file.
-        """
 
-        file_path = Path(firmware.path)
+        algorithm = (
+            firmware.checksum_algorithm
+            or "SHA256"
+        ).lower()
+
+        if algorithm != "sha256":
+
+            raise ValueError(
+                "Unsupported checksum algorithm: "
+                f"{firmware.checksum_algorithm}"
+            )
 
         sha256 = hashlib.sha256()
 
-        with file_path.open("rb") as file:
+        with Path(
+            firmware.path
+        ).open("rb") as file:
 
             while True:
 
-                chunk = file.read(1024 * 1024)
+                chunk = file.read(
+                    1024 * 1024
+                )
 
                 if not chunk:
+
                     break
 
                 sha256.update(chunk)
@@ -250,129 +602,16 @@ class FirmwareService:
         self,
         firmware: Firmware,
     ) -> bool:
-        """
-        Verify the firmware checksum when a checksum is
-        available in the Firmware model.
-
-        If no checksum has been defined, return False
-        rather than assuming the file is valid.
-        """
 
         if not firmware.checksum:
+
             return False
 
-        actual = self.calculate_checksum(firmware)
+        actual = self.calculate_checksum(
+            firmware
+        )
 
         return (
             actual.lower()
             == firmware.checksum.lower()
         )
-
-    # =====================================================
-    # Firmware Builder
-    # =====================================================
-
-    def _build_firmware(
-        self,
-        file_path: Path,
-    ) -> Firmware | None:
-        """
-        Build a Firmware model from a firmware file.
-
-        Expected project structure:
-
-            resources/
-                firmware/
-                    ZNA2US/
-                        firmware.bin
-
-        The parent directory is used as the firmware
-        package name.
-        """
-
-        try:
-
-            relative_path = file_path.relative_to(
-                self.firmware_root
-            )
-
-        except ValueError:
-
-            return None
-
-        # ---------------------------------------------
-        # Package name
-        # ---------------------------------------------
-
-        if len(relative_path.parts) > 1:
-
-            name = relative_path.parts[0]
-
-        else:
-
-            name = file_path.stem
-
-        # ---------------------------------------------
-        # Version
-        # ---------------------------------------------
-
-        version = self._extract_version(
-            file_path.name
-        )
-
-        # ---------------------------------------------
-        # File information
-        # ---------------------------------------------
-
-        size = file_path.stat().st_size
-
-        return Firmware(
-
-            name=name,
-
-            version=version,
-
-            filename=file_path.name,
-
-            path=str(file_path.resolve()),
-
-            size=size,
-
-        )
-
-    # =====================================================
-    # Version Detection
-    # =====================================================
-
-    @staticmethod
-    def _extract_version(filename: str) -> str:
-        """
-        Extract a firmware version from the filename.
-
-        Example:
-
-            UnlockBoxIII_260123_ZNA2US-WWDG2d_1.00.ino.generic_stm32f103r.bin
-
-        returns:
-
-            1.00
-
-        If no version can be identified, return an empty
-        string.
-
-        This method intentionally uses a conservative
-        pattern and does not modify the filename.
-        """
-
-        import re
-
-        match = re.search(
-            r"[_-](\d+\.\d+)(?:\.[^.]+)*\.bin$",
-            filename,
-            re.IGNORECASE,
-        )
-
-        if match:
-            return match.group(1)
-
-        return ""
