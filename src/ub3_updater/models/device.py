@@ -1,6 +1,6 @@
 """
 =========================================================
-UB3 Device Manager
+UB3 Firmware Updater
 
 Device Model
 
@@ -8,108 +8,103 @@ Developer:
 Benjamin William
 
 Description:
-Represents a detected UB3 device.
+Represents a USB device detected by Windows.
 
-This model is shared between:
+This class contains ONLY hardware detection information.
 
-• Device Service
-• Device Monitor
-• Upload Service
-• Logger Service
-• UI
+Business logic such as firmware version, upload state,
+or update progress belongs to other services.
 
 Version:
-0.3.0
+0.4.0
 =========================================================
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, asdict
-from enum import Enum
 from datetime import datetime
+from enum import Enum
 
 
-# ---------------------------------------------------------
-# Device State
-# ---------------------------------------------------------
+# =========================================================
+# Hardware Mode
+# =========================================================
 
 class DeviceState(Enum):
     DISCONNECTED = "Disconnected"
-    RUNTIME = "Runtime"
-    DFU = "DFU Bootloader"
+
+    MAPLE_SERIAL = "Maple Serial"
+
+    USB_SERIAL = "USB Serial Device"
+
     UNKNOWN = "Unknown"
 
 
-# ---------------------------------------------------------
-# Device Model
-# ---------------------------------------------------------
+# =========================================================
+# Device
+# =========================================================
 
 @dataclass(slots=True)
 class Device:
 
-    # ----------------------------
-    # Status
-    # ----------------------------
+    # ----------------------------------------
+    # Hardware State
+    # ----------------------------------------
 
     connected: bool = False
 
     state: DeviceState = DeviceState.DISCONNECTED
 
-    # ----------------------------
-    # USB
-    # ----------------------------
+    # ----------------------------------------
+    # USB Information
+    # ----------------------------------------
 
-    com_port: str = "--"
+    com_port: str = ""
+
+    usb_name: str = ""
+
+    description: str = ""
+
+    manufacturer: str = ""
 
     vid: str = ""
 
     pid: str = ""
 
-    manufacturer: str = ""
-
-    description: str = ""
-
     hwid: str = ""
 
-    # ----------------------------
-    # UB3 Information
-    # ----------------------------
+    location: str = ""
 
-    board: str = "--"
+    # ----------------------------------------
+    # Detection
+    # ----------------------------------------
 
-    firmware: str = "Unknown"
-
-    serial_number: str = "--"
-
-    usb_name: str = "--"
-
-    # ----------------------------
-    # Detection Time
-    # ----------------------------
-
-    last_seen: datetime | None = None
+    detected_at: datetime | None = None
 
     # =====================================================
     # Properties
     # =====================================================
 
     @property
-    def is_connected(self) -> bool:
+    def is_connected(self):
+
         return self.connected
 
     @property
-    def is_runtime(self) -> bool:
-        return self.state == DeviceState.RUNTIME
+    def is_maple(self):
+
+        return self.state == DeviceState.MAPLE_SERIAL
 
     @property
-    def is_dfu(self) -> bool:
-        return self.state == DeviceState.DFU
+    def is_usb_serial(self):
+
+        return self.state == DeviceState.USB_SERIAL
 
     @property
-    def display_name(self) -> str:
+    def display_name(self):
 
-        if self.usb_name != "--":
+        if self.usb_name:
             return self.usb_name
 
         if self.description:
@@ -127,44 +122,78 @@ class Device:
 
         data["state"] = self.state.value
 
-        if self.last_seen is not None:
-            data["last_seen"] = self.last_seen.isoformat()
+        if self.detected_at:
+
+            data["detected_at"] = self.detected_at.isoformat()
 
         return data
 
     @classmethod
     def from_dict(cls, data):
 
-        state = DeviceState(data.get("state", "Disconnected"))
+        detected = data.get("detected_at")
 
-        last_seen = data.get("last_seen")
+        if detected:
 
-        if last_seen:
-            last_seen = datetime.fromisoformat(last_seen)
+            detected = datetime.fromisoformat(detected)
 
         return cls(
+
             connected=data.get("connected", False),
-            state=state,
-            com_port=data.get("com_port", "--"),
-            vid=data.get("vid", ""),
-            pid=data.get("pid", ""),
-            manufacturer=data.get("manufacturer", ""),
+
+            state=DeviceState(data.get("state", "Disconnected")),
+
+            com_port=data.get("com_port", ""),
+
+            usb_name=data.get("usb_name", ""),
+
             description=data.get("description", ""),
+
+            manufacturer=data.get("manufacturer", ""),
+
+            vid=data.get("vid", ""),
+
+            pid=data.get("pid", ""),
+
             hwid=data.get("hwid", ""),
-            board=data.get("board", "--"),
-            firmware=data.get("firmware", "Unknown"),
-            serial_number=data.get("serial_number", "--"),
-            usb_name=data.get("usb_name", "--"),
-            last_seen=last_seen,
+
+            location=data.get("location", ""),
+
+            detected_at=detected,
         )
 
     # =====================================================
-    # String Representation
+    # Hardware Comparison
+    # =====================================================
+
+    def same_device(self, other):
+
+        if other is None:
+            return False
+
+        return (
+
+            self.connected == other.connected
+
+            and self.state == other.state
+
+            and self.com_port == other.com_port
+
+            and self.vid == other.vid
+
+            and self.pid == other.pid
+
+            and self.description == other.description
+        )
+
+    # =====================================================
+    # String
     # =====================================================
 
     def __str__(self):
 
         if not self.connected:
+
             return "No Device Connected"
 
         return (

@@ -1,6 +1,6 @@
 """
 =========================================================
-UB3 Device Manager
+UB3 Firmware Updater
 
 Device Service
 
@@ -8,16 +8,22 @@ Developer:
 Benjamin William
 
 Description:
-Central hardware detection engine.
+Hardware detection engine.
 
-Responsible for:
+Responsibilities:
+    • Scan available COM ports
+    • Identify supported UB3 devices
+    • Determine hardware state
+    • Build Device objects
 
-• Detecting COM ports
-• Detecting Runtime devices
-• Detecting DFU Bootloader
-• Building Device objects
+This service NEVER:
 
-Does NOT perform uploads.
+    • Uploads firmware
+    • Logs events
+    • Updates the UI
+
+Version:
+0.4.0
 =========================================================
 """
 
@@ -34,11 +40,9 @@ from ub3_updater.utils.usb_helper import (
 )
 
 from ub3_updater.constants.usb_ids import (
-    STM32_RUNTIME_VENDOR,
-    KNOWN_DEVICE_NAMES,
+    STM32_VENDOR_ID,
+    SUPPORTED_DEVICES,
 )
-
-from ub3_updater.services.logger_service import LoggerService
 
 
 class DeviceService:
@@ -47,22 +51,20 @@ class DeviceService:
 
         self.current_device = Device()
 
-    # --------------------------------------------------
+    # =====================================================
     # Public API
-    # --------------------------------------------------
+    # =====================================================
 
     def scan(self) -> Device:
         """
-        Scan all serial ports and return the detected device.
+        Scan all COM ports and return the first supported UB3.
         """
 
-        ports = enumerate_ports()
+        ports = self.scan_ports()
 
         for port in ports:
 
-            info = port_to_dict(port)
-
-            device = self._build_device(info)
+            device = self.identify_device(port)
 
             if device.connected:
 
@@ -74,153 +76,101 @@ class DeviceService:
 
         return self.current_device
 
-    def refresh(self) -> Device:
-        """
-        Refresh current device information.
-        """
+    def scan_ports(self):
 
-        return self.scan()
+        return enumerate_ports()
 
-    def is_connected(self) -> bool:
-
-        return self.current_device.connected
-
-    def get_current_device(self) -> Device:
+    def get_current_device(self):
 
         return self.current_device
 
-    # --------------------------------------------------
-    # Detection
-    # --------------------------------------------------
+    def refresh(self):
 
-    def _build_device(self, info: dict) -> Device:
+        return self.scan()
 
-        vendor = ""
+    def is_connected(self):
+
+        return self.current_device.connected
+
+    def is_maple(self):
+
+        return self.current_device.state == DeviceState.MAPLE_SERIAL
+
+    def is_bootloader(self):
+
+        return self.current_device.state == DeviceState.USB_SERIAL
+
+    # =====================================================
+    # Device Identification
+    # =====================================================
+
+    def identify_device(self, port):
+
+        info = port_to_dict(port)
+
+        return self.build_device(info)
+
+    # =====================================================
+    # Device Builder
+    # =====================================================
+
+    def build_device(self, info: dict):
+
+        vid = ""
 
         if info["vid"] is not None:
-            vendor = f"{info['vid']:04X}"
+            vid = f"{info['vid']:04X}"
 
         pid = ""
 
         if info["pid"] is not None:
             pid = f"{info['pid']:04X}"
 
-        description = info.get("description") or ""
+        state = self.detect_state(vid, pid)
 
-        manufacturer = info.get("manufacturer") or ""
+        if state == DeviceState.UNKNOWN:
+            return Device()
 
-        hwid = info.get("hwid") or ""
+        return Device(
 
-        # ------------------------------------------
-        # Runtime Device
-        # ------------------------------------------
+            connected=True,
 
-        if self._is_runtime(vendor, description):
+            state=state,
 
-            LoggerService.info(
-                f"Runtime device detected on {info['device']}"
-            )
+            com_port=info.get("device", ""),
 
-            return Device(
+            usb_name=info.get("description", ""),
 
-                connected=True,
+            description=info.get("description", ""),
 
-                state=DeviceState.RUNTIME,
+            manufacturer=info.get("manufacturer", ""),
 
-                com_port=info["device"],
+            vid=vid,
 
-                vid=vendor,
+            pid=pid,
 
-                pid=pid,
+            hwid=info.get("hwid", ""),
 
-                manufacturer=manufacturer,
+            location=info.get("location", ""),
 
-                description=description,
+            detected_at=datetime.now(),
 
-                hwid=hwid,
-
-                board="STM32",
-
-                firmware="Unknown",
-
-                serial_number=info.get("serial_number") or "--",
-
-                usb_name=description,
-
-                last_seen=datetime.now()
-
-            )
-
-        # ------------------------------------------
-        # DFU Bootloader
-        # ------------------------------------------
-
-        if self._is_dfu(hwid):
-
-            LoggerService.info(
-                "STM32 DFU Bootloader detected."
-            )
-
-            return Device(
-
-                connected=True,
-
-                state=DeviceState.DFU,
-
-                com_port=info["device"],
-
-                vid=vendor,
-
-                pid=pid,
-
-                manufacturer=manufacturer,
-
-                description=description,
-
-                hwid=hwid,
-
-                board="STM32",
-
-                firmware="Unknown",
-
-                serial_number=info.get("serial_number") or "--",
-
-                usb_name=description,
-
-                last_seen=datetime.now()
-
-            )
-
-        return Device()
-
-    # --------------------------------------------------
-    # Detection Rules
-    # --------------------------------------------------
-
-    @staticmethod
-    def _is_runtime(vendor: str, description: str) -> bool:
-
-        if vendor == STM32_RUNTIME_VENDOR:
-            return True
-
-        return any(
-            name.lower() in description.lower()
-            for name in KNOWN_DEVICE_NAMES
         )
 
-    @staticmethod
-    def _is_dfu(hwid: str) -> bool:
+    # =====================================================
+    # State Detection
+    # =====================================================
 
-        return "1EAF" in hwid.upper()
+    def detect_state(self, vid: str, pid: str):
 
-    # --------------------------------------------------
-    # Convenience Methods
-    # --------------------------------------------------
+        if vid != STM32_VENDOR_ID:
 
-    def runtime_connected(self) -> bool:
+            return DeviceState.UNKNOWN
 
-        return self.current_device.is_runtime
+        profile = SUPPORTED_DEVICES.get((vid, pid))
 
-    def dfu_connected(self) -> bool:
+        if profile is None:
 
-        return self.current_device.is_dfu
+            return DeviceState.UNKNOWN
+
+        return DeviceState[profile["state"]]
