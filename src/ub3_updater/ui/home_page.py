@@ -32,7 +32,7 @@ class HomePage(BasePage):
             subtitle="Connect your UB3 device to begin firmware management."
         )
 
-    self.build_home()
+        self.build_home()
 
     def build_home(self):
 

@@ -8,22 +8,16 @@ Developer:
 Benjamin William
 =========================================================
 """
+from ub3_updater.models.device import Device
+from ub3_updater.utils.usb_helper import (
+    enumerate_ports,
+    port_to_dict,
+)
 
-from dataclasses import dataclass
-
-
-@dataclass
-class DeviceInfo:
-
-    connected: bool
-
-    com_port: str
-
-    board: str
-
-    dfu: str
-
-    firmware: str
+from ub3_updater.constants.usb_ids import (
+    STM32_RUNTIME_VENDOR,
+    KNOWN_DEVICE_NAMES,
+)
 
 
 class DeviceService:
@@ -51,23 +45,94 @@ class DeviceService:
 
     def get_device(self):
 
-        """
-        Temporary implementation.
+        ports = enumerate_ports()
 
-        Later this function will detect
-        the actual hardware.
-        """
+        for port in ports:
 
-        return DeviceInfo(
+            info = port_to_dict(port)
 
-            connected=False,
+            vendor = ""
 
-            com_port="--",
+            if info["vid"] is not None:
+                vendor = f"{info['vid']:04X}"
 
-            board="--",
+            description = info["description"] or ""
 
-            dfu="Not Available",
+            manufacturer = info["manufacturer"] or ""
 
-            firmware="--",
+            hwid = info["hwid"] or ""
 
-        )
+            # ---------------------------------
+            # Detect STM32 Runtime Device
+            # ---------------------------------
+
+            if vendor == STM32_RUNTIME_VENDOR:
+
+                return Device(
+
+                    connected=True,
+
+                    com_port=info["device"],
+
+                    board="STM32",
+
+                    dfu="Runtime",
+
+                    firmware="Unknown",
+
+                    serial_number=info["serial_number"] or "--",
+
+                    usb_name=description,
+
+                )
+
+            # ---------------------------------
+            # Detect by Description
+            # ---------------------------------
+
+            if any(name.lower() in description.lower()
+                for name in KNOWN_DEVICE_NAMES):
+
+                return Device(
+
+                    connected=True,
+
+                    com_port=info["device"],
+
+                    board="STM32",
+
+                    dfu="Runtime",
+
+                    firmware="Unknown",
+
+                    serial_number=info["serial_number"] or "--",
+
+                    usb_name=description,
+
+                )
+
+            # ---------------------------------
+            # Detect Maple Bootloader
+            # ---------------------------------
+
+            if "1EAF" in hwid.upper():
+
+                return Device(
+
+                    connected=True,
+
+                    com_port=info["device"],
+
+                    board="STM32",
+
+                    dfu="Bootloader",
+
+                    firmware="Unknown",
+
+                    serial_number=info["serial_number"] or "--",
+
+                    usb_name=description,
+
+                )
+
+        return Device()
