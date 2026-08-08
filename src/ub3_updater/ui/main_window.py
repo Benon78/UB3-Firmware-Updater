@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt
 
-from ub3_updater.ui.home_page import HomePage
+from ub3_updater.ui.pages.home_page import HomePage
 
 
 class MainWindow(QMainWindow):

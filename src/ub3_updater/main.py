@@ -1,15 +1,14 @@
 """
 =========================================================
-UB3 Firmware Updater
+UB3 Device Manager
 
-Entry Point
+Application Entry Point
 
 Developer:
 Benjamin William
 
 Version:
-0.1.0
-
+0.2.0
 =========================================================
 """
 
@@ -17,20 +16,19 @@ import sys
 
 from PySide6.QtWidgets import QApplication
 
-from ub3_updater.app import UB3UpdaterApp
+from ub3_updater.themes.light_theme import STYLE
+from ub3_updater.ui.main_window import MainWindow
 
 
-def main():
+def main() -> None:
+    """Start the application."""
 
     app = QApplication(sys.argv)
+
     app.setStyleSheet(STYLE)
 
-    window = UB3UpdaterApp()
+    window = MainWindow()
 
     window.show()
 
     sys.exit(app.exec())
-
-
-if __name__ == "__main__":
-    main()
