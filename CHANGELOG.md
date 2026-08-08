@@ -114,3 +114,18 @@ The current Maple Loader workflow starts from Maple Serial mode and performs the
 - Post-upload USB reset warning correctly classified as `SUCCESS_WITH_WARNING`.
 - Real upload completed with return code `0`.
 - End-to-end upload duration observed at approximately 18.6 seconds.
+
+### Implement the initial UB3 Firmware Updater GUI foundation.
+
+- Add light theme and base UI styling
+- Add MainWindow and HomePage
+- Add ConnectionStatus widget
+- Add DashboardWidget
+- Integrate firmware repository into the GUI
+- Display firmware package and version
+- Add automatic UB3 connection state handling
+- Display detected COM port and Maple Serial state
+- Enable Update only when the device is ready
+- Disable Update when the device disconnects
+- Add GUI regression tests
+- Preserve existing UploadService, UploadWorker and UpdateController architecture

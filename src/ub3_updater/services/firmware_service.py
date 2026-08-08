@@ -42,6 +42,9 @@ import re
 from pathlib import Path
 
 from ub3_updater.models.firmware import Firmware
+from ub3_updater.services.config_service import (
+    ConfigService,
+)
 
 
 class FirmwareService:
@@ -50,8 +53,8 @@ class FirmwareService:
     # Configuration
     # =====================================================
 
-    DEFAULT_FIRMWARE_ROOT = Path(
-        "resources/firmware"
+    DEFAULT_FIRMWARE_ROOT = (
+        ConfigService.firmware_root()
     )
 
     METADATA_FILENAME = "firmware.json"
@@ -74,12 +77,12 @@ class FirmwareService:
         if firmware_root is None:
 
             firmware_root = (
-                self.DEFAULT_FIRMWARE_ROOT
+                ConfigService.firmware_root()
             )
 
         self.firmware_root = Path(
             firmware_root
-        )
+        ).resolve()
 
         self._firmwares: list[Firmware] = []
 

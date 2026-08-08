@@ -1,12 +1,14 @@
 """
-=========================================================
-UB3 Firmware Updater
+UB3 Firmware Updater - Light Theme
 
-Professional Light Theme
-
-Developer:
-Benjamin William
-=========================================================
+UI palette based on the approved UB3 UI/UX design:
+Primary Dark  #1E3A8A
+Primary Blue  #2563EB
+Success       #10B981
+Warning       #F59E0B
+Error         #EF4444
+Neutral       #6B7280
+Background    #F3F4F6
 """
 
 PRIMARY = "#2563EB"
@@ -15,113 +17,166 @@ PRIMARY_DARK = "#1E3A8A"
 SUCCESS = "#10B981"
 WARNING = "#F59E0B"
 ERROR = "#EF4444"
+NEUTRAL = "#6B7280"
 
-BACKGROUND = "#F8FAFC"
+BACKGROUND = "#F3F4F6"
 CARD = "#FFFFFF"
 
 TEXT = "#111827"
 TEXT_SECONDARY = "#6B7280"
-
 BORDER = "#E5E7EB"
+
+INFO_BACKGROUND = "#EFF6FF"
+SUCCESS_BACKGROUND = "#ECFDF5"
+WARNING_BACKGROUND = "#FFFBEB"
+ERROR_BACKGROUND = "#FEF2F2"
 
 WINDOW_RADIUS = 10
 CARD_RADIUS = 8
 BUTTON_RADIUS = 6
-
 FONT = "Segoe UI"
 
 STYLE = f"""
-
 QMainWindow {{
-    background:{BACKGROUND};
+    background: {BACKGROUND};
 }}
 
 QWidget {{
-    background:{BACKGROUND};
-    color:{TEXT};
-    font-family:"Segoe UI";
-    font-size:10pt;
+    background: {BACKGROUND};
+    color: {TEXT};
+    font-family: "{FONT}";
+    font-size: 10pt;
 }}
 
 QFrame {{
-    background:{CARD};
-    border:1px solid {BORDER};
-    border-radius:8px;
+    background: {CARD};
+    border: 1px solid {BORDER};
+    border-radius: {CARD_RADIUS}px;
+}}
+
+QLabel {{
+    background: transparent;
 }}
 
 QPushButton {{
-
-    background:{PRIMARY};
-
-    color:white;
-
-    border:none;
-
-    border-radius:6px;
-
-    min-height:38px;
-
-    font-weight:600;
-
+    background: {PRIMARY};
+    color: white;
+    border: none;
+    border-radius: {BUTTON_RADIUS}px;
+    min-height: 38px;
+    padding: 0 16px;
+    font-weight: 600;
 }}
 
 QPushButton:hover {{
-
-    background:#1D4ED8;
-
+    background: #1D4ED8;
 }}
 
 QPushButton:pressed {{
-
-    background:{PRIMARY_DARK};
-
+    background: {PRIMARY_DARK};
 }}
 
-QLineEdit,
+QPushButton:disabled {{
+    background: #D1D5DB;
+    color: #6B7280;
+}}
+
+QPushButton[class="secondary"] {{
+    background: white;
+    color: {PRIMARY};
+    border: 1px solid {PRIMARY};
+}}
+
+QPushButton[class="secondary"]:hover {{
+    background: {INFO_BACKGROUND};
+}}
+
+QPushButton[class="success"] {{
+    background: {SUCCESS};
+}}
+
+QPushButton[class="danger"] {{
+    background: {ERROR};
+}}
+
 QComboBox,
+QLineEdit {{
+    background: white;
+    border: 1px solid {BORDER};
+    border-radius: {BUTTON_RADIUS}px;
+    padding: 7px 10px;
+    min-height: 22px;
+}}
+
+QComboBox:focus,
+QLineEdit:focus {{
+    border: 1px solid {PRIMARY};
+}}
+
+QComboBox:disabled {{
+    background: #F9FAFB;
+    color: {NEUTRAL};
+}}
+
+QProgressBar {{
+    background: #E5E7EB;
+    border: none;
+    border-radius: 7px;
+    height: 14px;
+    text-align: center;
+    color: {TEXT};
+}}
+
+QProgressBar::chunk {{
+    background: {PRIMARY};
+    border-radius: 7px;
+}}
+
 QPlainTextEdit,
 QTextEdit {{
-
-    background:white;
-
-    border:1px solid {BORDER};
-
-    border-radius:6px;
-
-    padding:6px;
-
+    background: white;
+    border: 1px solid {BORDER};
+    border-radius: {BUTTON_RADIUS}px;
+    padding: 8px;
 }}
 
-QTableWidget {{
-
-    background:white;
-
-    gridline-color:{BORDER};
-
-    border:1px solid {BORDER};
-
+QScrollBar:vertical {{
+    background: #F9FAFB;
+    width: 10px;
+    margin: 0;
 }}
 
-QHeaderView::section {{
-
-    background:#F3F4F6;
-
-    padding:8px;
-
-    border:none;
-
-    border-bottom:1px solid {BORDER};
-
-    font-weight:600;
-
+QScrollBar::handle:vertical {{
+    background: #D1D5DB;
+    border-radius: 5px;
+    min-height: 30px;
 }}
 
 QStatusBar {{
-
-    background:white;
-
-    border-top:1px solid {BORDER};
-
+    background: white;
+    border-top: 1px solid {BORDER};
 }}
-
 """
+
+def card_style():
+    return f"""
+        QFrame {{
+            background: {CARD};
+            border: 1px solid {BORDER};
+            border-radius: {CARD_RADIUS}px;
+        }}
+    """
+
+def title_style():
+    return f"""
+        color: {TEXT};
+        font-size: 14pt;
+        font-weight: 600;
+        border: none;
+    """
+
+def secondary_style():
+    return f"""
+        color: {TEXT_SECONDARY};
+        border: none;
+    """

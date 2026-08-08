@@ -70,6 +70,10 @@ from ub3_updater.utils.process_runner import (
     ProcessRunner,
 )
 
+from ub3_updater.services.config_service import (
+    ConfigService,
+)
+
 
 class UploadService:
     """
@@ -108,10 +112,17 @@ class UploadService:
     # Default Uploader
     # =====================================================
 
-    DEFAULT_UPLOADER = Path(
-        "resources/tools/maple_upload.bat"
+    DEFAULT_UPLOADER = (
+        ConfigService.maple_uploader()
     )
 
+    DEVELOPMENT_MAPLE_UPLOADER = Path(
+        r"C:\Benon\Personal\Set_UP\Arduino"
+        r"\hardware\Arduino_STM32"
+        r"\Arduino_STM32-master"
+        r"\tools\win"
+        r"\maple_upload.bat"
+    )
     # =====================================================
     # Temporary Firmware Directory
     # =====================================================
@@ -192,8 +203,8 @@ class UploadService:
         self.uploader_path = Path(
             uploader_path
             if uploader_path is not None
-            else self.DEFAULT_UPLOADER
-        )
+            else self.resolve_default_uploader()
+        ).resolve()
 
         self.timeout = (
             timeout
@@ -1089,3 +1100,40 @@ class UploadService:
             return state.value
 
         return str(state)
+
+    # =====================================================
+    # Default Uploader Resolution
+    # =====================================================
+
+    @classmethod
+    def resolve_default_uploader(cls) -> Path:
+        """
+        Resolve the Maple uploader.
+
+        Priority
+        --------
+        1. Project-local Maple uploader.
+        2. Existing development Arduino installation.
+
+        If neither exists, return the configured project-local
+        path so UploadService can report the missing uploader
+        through its normal validation flow instead of failing
+        during object construction.
+        """
+
+        project_uploader = (
+            ConfigService.maple_uploader()
+        )
+
+        if project_uploader.is_file():
+
+            return project_uploader.resolve()
+
+        if cls.DEVELOPMENT_MAPLE_UPLOADER.is_file():
+
+            return (
+                cls.DEVELOPMENT_MAPLE_UPLOADER
+                .resolve()
+            )
+
+        return project_uploader.resolve()
