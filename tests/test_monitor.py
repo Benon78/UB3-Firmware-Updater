@@ -1,10 +1,7 @@
 import sys
 import bootstrap
 
-from PySide6.QtCore import (
-    QCoreApplication,
-    QTimer
-)
+from PySide6.QtCore import QCoreApplication
 
 from ub3_updater.workers.device_monitor import DeviceMonitor
 
@@ -12,29 +9,31 @@ app = QCoreApplication(sys.argv)
 
 monitor = DeviceMonitor()
 
-monitor.device_changed.connect(
-    lambda d: print("Changed:", d)
-)
 
 monitor.device_connected.connect(
-    lambda d: print("Connected:", d)
+    lambda d: print(f"[CONNECTED] {d}")
 )
 
 monitor.device_disconnected.connect(
-    lambda: print("Disconnected")
+    lambda: print("[DISCONNECTED]")
 )
 
-monitor.runtime_detected.connect(
-    lambda d: print("Runtime:", d)
+monitor.maple_detected.connect(
+    lambda d: print(f"[MAPLE] {d}")
 )
 
-monitor.dfu_detected.connect(
-    lambda d: print("DFU:", d)
+monitor.bootloader_detected.connect(
+    lambda d: print(f"[BOOTLOADER] {d}")
+)
+
+monitor.state_changed.connect(
+    lambda old, new: print(f"[STATE] {old.state.value} -> {new.state.value}")
+)
+
+monitor.device_changed.connect(
+    lambda d: print(f"[DEVICE] {d}")
 )
 
 monitor.start()
-
-# Stop automatically after 20 seconds
-QTimer.singleShot(20000, app.quit)
 
 sys.exit(app.exec())
