@@ -7,9 +7,12 @@ Device detection + firmware selection + update dashboard.
 
 from __future__ import annotations
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
+    QScrollArea,
+    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
@@ -83,64 +86,121 @@ class HomePage(BasePage):
 
         # ----------------------------------------------
         # Main two-column area
+        #
+        # Each column owns its own vertical scroll area.
+        # This prevents the device cards and firmware dashboard
+        # from compressing into each other when the window height
+        # is reduced or the content grows.
         # ----------------------------------------------
 
         columns = QHBoxLayout()
-        columns.setSpacing(14)
+        columns.setSpacing(16)
+        columns.setContentsMargins(0, 0, 0, 0)
 
-        left = QVBoxLayout()
+        # -----------------------------
+        # Left: connection/device info
+        # -----------------------------
+
+        left_content = QWidget()
+        left_content.setObjectName("homeLeftContent")
+        left_content.setSizePolicy(
+            QSizePolicy.Policy.Preferred,
+            QSizePolicy.Policy.Minimum,
+        )
+
+        left = QVBoxLayout(left_content)
+        left.setContentsMargins(2, 2, 8, 2)
         left.setSpacing(14)
 
-        right = QVBoxLayout()
+        # -----------------------------
+        # Right: firmware/update area
+        # -----------------------------
+
+        right_content = QWidget()
+        right_content.setObjectName("homeRightContent")
+        right_content.setSizePolicy(
+            QSizePolicy.Policy.Preferred,
+            QSizePolicy.Policy.Minimum,
+        )
+
+        right = QVBoxLayout(right_content)
+        right.setContentsMargins(2, 2, 8, 2)
         right.setSpacing(14)
 
-        self.connection_widget = (
-            ConnectionStatusWidget()
+        self.connection_widget = ConnectionStatusWidget()
+        self.connection_widget.setSizePolicy(
+            QSizePolicy.Policy.Preferred,
+            QSizePolicy.Policy.Fixed,
         )
 
-        self.device_information_widget = (
-            DeviceInformationWidget()
+        self.device_information_widget = DeviceInformationWidget()
+        self.device_information_widget.setSizePolicy(
+            QSizePolicy.Policy.Preferred,
+            QSizePolicy.Policy.Preferred,
         )
 
-        self.instruction_widget = (
-            InstructionWidget()
+        self.instruction_widget = InstructionWidget()
+        self.instruction_widget.setSizePolicy(
+            QSizePolicy.Policy.Preferred,
+            QSizePolicy.Policy.Preferred,
         )
 
-        self.dashboard_widget = (
-            DashboardWidget()
+        self.dashboard_widget = DashboardWidget()
+        self.dashboard_widget.setSizePolicy(
+            QSizePolicy.Policy.Preferred,
+            QSizePolicy.Policy.Preferred,
         )
 
-        left.addWidget(
-            self.connection_widget
+        left.addWidget(self.connection_widget)
+        left.addWidget(self.device_information_widget)
+        left.addWidget(self.instruction_widget)
+        left.addStretch(1)
+
+        right.addWidget(self.dashboard_widget)
+        right.addStretch(1)
+
+        # -----------------------------
+        # Independent scroll areas
+        # -----------------------------
+
+        self.left_scroll_area = QScrollArea()
+        self.left_scroll_area.setObjectName("leftHomeScrollArea")
+        self.left_scroll_area.setWidgetResizable(True)
+        self.left_scroll_area.setFrameShape(QScrollArea.Shape.NoFrame)
+        self.left_scroll_area.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+        self.left_scroll_area.setVerticalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAsNeeded
+        )
+        self.left_scroll_area.setWidget(left_content)
+        self.left_scroll_area.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Expanding,
         )
 
-        left.addWidget(
-            self.device_information_widget
+        self.right_scroll_area = QScrollArea()
+        self.right_scroll_area.setObjectName("rightHomeScrollArea")
+        self.right_scroll_area.setWidgetResizable(True)
+        self.right_scroll_area.setFrameShape(QScrollArea.Shape.NoFrame)
+        self.right_scroll_area.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+        self.right_scroll_area.setVerticalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAsNeeded
+        )
+        self.right_scroll_area.setWidget(right_content)
+        self.right_scroll_area.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Expanding,
         )
 
-        left.addWidget(
-            self.instruction_widget
-        )
+        # Keep the established 1:2 visual balance while allowing
+        # both sections to consume the available window height.
+        columns.addWidget(self.left_scroll_area, 1)
+        columns.addWidget(self.right_scroll_area, 2)
 
-        left.addStretch()
-
-        right.addWidget(
-            self.dashboard_widget
-        )
-
-        columns.addLayout(
-            left,
-            1,
-        )
-
-        columns.addLayout(
-            right,
-            2,
-        )
-
-        self.add_layout(
-            columns
-        )
+        self.add_layout(columns)
 
         # ----------------------------------------------
         # Controller wiring

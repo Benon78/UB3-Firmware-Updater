@@ -226,6 +226,11 @@ class DashboardWidget(QFrame):
         )
 
     def _update_firmware_info(self):
+        """
+        Display the complete operator-facing firmware selection
+        information.  The values come directly from FirmwareService's
+        Firmware model; no metadata is invented by the UI.
+        """
         index = self.firmware_combo.currentIndex()
 
         if index < 0 or index >= len(self._firmwares):
@@ -236,9 +241,43 @@ class DashboardWidget(QFrame):
 
         firmware = self._firmwares[index]
 
+        name = firmware.name or "Unknown"
+        version = firmware.version or "Unknown"
+        target = (
+            firmware.target_device
+            or firmware.hardware
+            or "UB3"
+        )
+
+        file_name = firmware.filename or "--"
+        size = (
+            f"{firmware.size_mb:.2f} MB"
+            if firmware.size > 0
+            else "--"
+        )
+        release_date = firmware.release_date or "--"
+
+        file_status = (
+            "File OK"
+            if firmware.is_valid_file()
+            else "File validation required"
+        )
+
+        checksum_status = (
+            f"{firmware.checksum_algorithm}: configured"
+            if firmware.checksum
+            else "Checksum: not configured"
+        )
+
         lines = [
-            f"Version: {firmware.version or '--'}",
-            f"Target: {firmware.target_device or firmware.hardware or '--'}",
+            f"<b>{name}</b>",
+            f"Version: <b>{version}</b>",
+            f"Target Device: {target}",
+            f"Release Date: {release_date}",
+            f"File: {file_name}",
+            f"Size: {size}",
+            f"Status: {file_status}",
+            checksum_status,
         ]
 
         if firmware.description:
@@ -246,13 +285,8 @@ class DashboardWidget(QFrame):
                 f"Description: {firmware.description}"
             )
 
-        if firmware.filename:
-            lines.append(
-                f"File: {firmware.filename}"
-            )
-
         self.firmware_info.setText(
-            "\n".join(lines)
+            "<br>".join(lines)
         )
 
     def selected_firmware(self) -> Firmware | None:

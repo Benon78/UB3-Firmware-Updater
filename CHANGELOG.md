@@ -1,3 +1,22 @@
+## 2026-08-09 - GUI Step 3 Test Harness Fix
+
+- Updated GUI test controller stubs to implement the MainWindow callback registration contract.
+- Added the controller state property required by the MainWindow header.
+- Kept layout and firmware-selection tests independent of the production controller.
+
+## 2026-08-09 - GUI Step 3 Layout Refinement
+
+- Added independent vertical scroll areas for the Home page device and firmware sections.
+- Prevented sections from compressing into each other as content grows or window height decreases.
+- Disabled horizontal scrolling to preserve the responsive two-column layout.
+- Added GUI layout regression tests.
+
+## 2026-08-09 - GUI Step 3 - Firmware Selection
+
+- Improved firmware package selection presentation.
+- Added version, target, release date, filename, file size and validation status details.
+- Added firmware selection regression tests.
+
 # Changelog
 
 All notable changes to this project will be documented in this file.
