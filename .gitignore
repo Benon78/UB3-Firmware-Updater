@@ -31,3 +31,4 @@ Thumbs.db
 *.tmp
 tests/fixtures/*.bin
 *.zip
+run_all_tests.ps1

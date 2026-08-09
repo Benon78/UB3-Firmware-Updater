@@ -70,6 +70,10 @@ from ub3_updater.services.upload_service import (
     UploadService,
 )
 
+from ub3_updater.services.config_service import (
+    ConfigService,
+)
+
 from ub3_updater.utils.process_runner import (
     ProcessResult,
 )
@@ -354,24 +358,31 @@ process_runner = (
 
 
 # =========================================================
-# Maple Uploader
+# Bundled Maple Uploader
 # =========================================================
 
-REAL_UPLOADER = Path(
-    r"C:\Benon\Personal\Set_UP\Arduino"
-    r"\hardware\Arduino_STM32"
-    r"\Arduino_STM32-master"
-    r"\tools\win\maple_upload.bat"
+# The integration test must use the same Maple runtime that
+# the production application uses. It must not depend on an
+# Arduino installation outside the project tree.
+
+BUNDLED_UPLOADER = (
+    ConfigService.maple_uploader()
+    .resolve()
 )
 
 
 print()
-print("Maple uploader:")
-print(REAL_UPLOADER)
+print("Bundled Maple uploader:")
+print(BUNDLED_UPLOADER)
 
 print(
     "Exists       :",
-    REAL_UPLOADER.exists(),
+    BUNDLED_UPLOADER.exists(),
+)
+
+assert BUNDLED_UPLOADER.exists(), (
+    "Bundled Maple uploader is missing: "
+    f"{BUNDLED_UPLOADER}"
 )
 
 
@@ -386,7 +397,7 @@ service = UploadService(
 
     process_runner=process_runner,
 
-    uploader_path=REAL_UPLOADER,
+    uploader_path=BUNDLED_UPLOADER,
 )
 
 
@@ -661,15 +672,13 @@ print(
 
 assert (
     command[4]
-    == str(
-        REAL_UPLOADER.resolve()
-    )
+    == str(BUNDLED_UPLOADER)
 ), (
-    "Incorrect Maple uploader path."
+    "Incorrect bundled Maple uploader path."
 )
 
 print(
-    "[PASS] Maple uploader path correct"
+    "[PASS] Bundled Maple uploader path correct"
 )
 
 

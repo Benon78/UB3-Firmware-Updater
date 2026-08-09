@@ -1,278 +1,390 @@
-## Step 5.2 - Maple Command Integration
-
-Step 5.2 preserves the existing detection and upload architecture. The application uses the existing `ConfigService`, `FirmwareService`, `DeviceService`, `UpdateController`, `UploadWorker`, and `UploadService` chain.
-
-The Maple command contract is:
-
-`maple_upload COM3 2 1EAF:003 <firmware>`
-
-The COM port is obtained from the existing fresh `DeviceService.scan()` performed by `UploadService`. The firmware path comes directly from `resources/firmware/`. The earlier `C:\\tmp` location was only a manual CMD staging location and is not used by the application.
-
-Step 5.2 does not execute Maple Loader or program a physical UB3.
-
-## Step 5.1 - Maple Runtime Resources
-
-The project now contains the minimal Windows Maple Loader runtime required for the next hardware-integration stage:
-
-- `resources/tools/maple/maple_upload.bat`
-- `resources/tools/maple/maple_loader.jar`
-- `resources/tools/maple/lib/jssc.jar`
-- `resources/tools/maple/tool_manifest.json`
-
-Step 5.1 validates resource completeness only. It does not execute Maple Loader and does not program a physical UB3.
-
-## Step 4.5 — Live Update Progress UI
-
-The GUI now presents a dedicated operator-facing update progress panel while firmware programming is active.
-
-- Added a circular workflow progress indicator and a horizontal progress bar.
-- Progress values represent verified workflow phases, not transferred bytes.
-- The UI never fabricates a byte-level percentage because Maple Loader does not expose a trustworthy numeric transfer percentage through the current integration.
-- Workflow phases include Preparing (10%), Starting (25%), Uploading (60%), Finalizing (85%), and Complete (100%).
-- Live controller progress messages and recognized Maple Loader output update the progress presentation.
-- The active update keeps the Update button disabled and Cancel available.
-- Successful updates retain a 100% completion summary; failures do not present a misleading completion percentage.
-- The upload log automatically follows the newest live output.
-- Added `tests/test_gui_update_progress.py`.
-- No physical UB3 is programmed by the Step 4.5 GUI test.
-
-## Step 4.4 — UploadWorker Progress and Live Output
-
-The application receives UploadWorker lifecycle/progress events and live Maple Loader output without blocking the UI.
-
-- UploadWorker forwards `UploadService` stdout/stderr through callbacks.
-- UpdateController forwards worker output to the GUI signal bridge.
-- Dashboard consumes textual progress phases without inventing byte-level transfer progress.
-- Upload/Cancel controls remain locked to the active operation state.
-- The Step 4.4 streaming test uses a fake upload service and never programs a physical UB3.
-
 # UB3 Firmware Updater
 
-A Windows desktop application for safely updating UB3 firmware using the existing Arduino STM32 / Maple Loader upload environment.
+A Windows desktop application for safely updating firmware on UB3 (Unlock Box 3) devices using the STM32 Maple Loader workflow.
 
 ## Purpose
 
-The application provides a controlled operator workflow for:
+The application provides a controlled operator workflow to:
 
-- Detecting UB3 devices automatically.
-- Verifying the device is in Maple Serial mode before programming.
-- Selecting firmware from the local firmware repository.
-- Validating firmware files before programming.
-- Re-validating the intended UB3 immediately before upload.
-- Showing the operator exactly which device and firmware will be programmed.
-- Requiring explicit confirmation before programming.
-- Running firmware programming through `UploadWorker` → `UploadService` → Maple Loader.
-- Reporting success, warnings, failures, cancellation and timeout states.
+- Automatically detect a connected UB3.
+- Verify that the UB3 is in Maple Serial mode before an update.
+- Automatically determine the current COM port.
+- Select firmware from the project firmware repository.
+- Validate the firmware before programming.
+- Re-check the intended UB3 immediately before programming.
+- Require explicit operator confirmation.
+- Run the Maple Loader workflow without requiring manual COM-port entry.
+- Display live upload progress and Maple Loader output.
+- Report successful updates, non-fatal warnings, failures, cancellation, and timeouts.
 
-The application is designed so that replacing a UB3 while the confirmation dialog is open cannot silently result in programming the replacement device.
+The application is designed to prevent an update from being sent to a different UB3 if the original device is disconnected or replaced during the confirmation stage.
 
-## Technology
+## Requirements
 
-- Python
-- PySide6
-- Arduino STM32
-- Maple Loader / `maple_upload.bat`
-- Local firmware repository
-- Windows USB/serial device detection
+- Windows
+- Python 3.11 or compatible supported Python version
+- Project virtual environment
+- Project dependencies from `requirements.txt`
+- Maple Loader runtime bundled under `resources/tools/maple/`
+- Firmware packages under `resources/firmware/`
 
-## Architecture
+The application does not require a separate Arduino STM32 installation for normal project operation.
+
+## Project Layout
 
 ```text
-GUI
- │
- ▼
-HomePage
- │
- ▼
-UpdateController
- │
- ├── DeviceMonitor
- ├── FirmwareService
- └── UploadWorker
-       │
-       ▼
-   UploadService
-       │
-       ▼
-   ProcessRunner
-       │
-       ▼
- maple_upload.bat
+UB3-Firmware-Updater/
+├── main.py
+├── src/
+│   └── ub3_updater/
+│       ├── controllers/
+│       ├── models/
+│       ├── services/
+│       ├── themes/
+│       ├── ui/
+│       ├── utils/
+│       └── widgets/
+├── resources/
+│   ├── firmware/
+│   │   └── <firmware packages>
+│   └── tools/
+│       └── maple/
+│           ├── maple_upload.bat
+│           ├── maple_loader.jar
+│           ├── lib/
+│           │   └── jssc.jar
+│           └── tool_manifest.json
+├── tests/
+├── logs/
+├── requirements.txt
+└── README.md
 ```
 
-The GUI does not execute Maple Loader directly.
+## Installing the Application for Development
 
-## Safe Update Workflow
+From the project root:
+
+```powershell
+python -m venv .venv
+.venv\Scriptsctivate
+pip install -r requirements.txt
+```
+
+## Starting the Application
+
+With the virtual environment activated:
+
+```powershell
+python main.py
+```
+
+The application is intended to be launched from the project root so the project-local resources and configuration are resolved correctly.
+
+## Preparing Firmware
+
+Place firmware packages in:
 
 ```text
-UB3 detected
-    ↓
-Firmware selected
-    ↓
-Update
-    ↓
-Pre-update validation
-    ↓
-Confirmation dialog
-    ↓
-Operator acknowledgement
-    ↓
-SECOND / FINAL validation
+resources/firmware/
+```
+
+Each firmware package is managed by the application's firmware repository/service.
+
+For example:
+
+```text
+resources/firmware/
+└── ZNA2US/
+    ├── firmware.json
+    └── UnlockBoxIII_260123_ZNA2US-WWDG2d_1.00.ino.generic_stm32f103r.bin
+```
+
+The firmware selector reads the available packages and displays the package name and version. The firmware information panel provides the available target, release, filename, size, and validation information.
+
+The application uses the selected firmware file directly from the project firmware repository. It does not require `C:\tmp` as a production staging directory.
+
+## Maple Loader Runtime
+
+The application uses the bundled Maple runtime:
+
+```text
+resources/tools/maple/
+├── maple_upload.bat
+├── maple_loader.jar
+├── lib/
+│   └── jssc.jar
+└── tool_manifest.json
+```
+
+The production upload path is therefore self-contained within the project.
+
+The underlying Maple command uses the detected COM port and the established UB3 Maple parameters:
+
+```text
+maple_upload COM3 2 1EAF:003 <firmware>
+```
+
+The application automatically substitutes the actual detected COM port and selected firmware path.
+
+Operators do not manually type the COM port into the upload command.
+
+## Device Detection
+
+The application automatically scans connected USB devices.
+
+The normal starting state for an update is:
+
+```text
+Maple Serial
+VID:PID = 1EAF:0004
+```
+
+The application detects the COM port from the current `Device` model.
+
+The bootloader/USB Serial state is treated separately. Operators should not manually force the UB3 into bootloader mode before starting the normal update workflow.
+
+## How to Perform a Firmware Update
+
+### 1. Start the application
+
+```powershell
+python main.py
+```
+
+### 2. Connect the UB3
+
+Connect the UB3 through USB and wait for the application to detect it.
+
+The Home page should show:
+
+- UB3 connection state
+- COM port
+- USB mode
+- VID:PID
+- Device information
+
+### 3. Select firmware
+
+Select the required firmware package and version from the firmware selector.
+
+Review the firmware information shown by the application.
+
+### 4. Confirm readiness
+
+The application only enables the update action when the required device and firmware conditions are satisfied.
+
+### 5. Start the update
+
+Select **Update UB3**.
+
+The application performs a fresh pre-update validation before programming.
+
+The validation checks include:
+
+- Device is connected.
+- Device is in Maple Serial mode.
+- The currently detected device matches the intended device.
+- Firmware is selected.
+- Firmware file exists and is valid.
+
+### 6. Confirm the update
+
+Review the confirmation dialog and verify the displayed device and firmware information.
+
+The operator must explicitly acknowledge the update before programming starts.
+
+### 7. Firmware programming
+
+The application runs:
+
+```text
+UpdateController
     ↓
 UploadWorker
     ↓
 UploadService
     ↓
+ProcessRunner
+    ↓
+maple_upload.bat
+    ↓
 Maple Loader
-    ↓
-UploadResult
-    ↓
-GUI result state
 ```
 
-### Why two validations?
+The GUI displays the current workflow phase and live process output.
 
-The first validation establishes the device and firmware shown to the operator.
+### 8. Review the result
 
-The confirmation dialog can remain open while the physical USB device changes. Therefore, after the operator confirms, the controller performs a second fresh scan.
+The application reports one of the supported result conditions, including:
 
-If the intended UB3 has been:
+- Successful update
+- Successful update with a non-fatal warning
+- Failed update
+- Cancelled update
+- Timeout
+- Device-not-ready condition
+- Invalid firmware
 
-- disconnected,
-- replaced by another UB3,
-- switched out of Maple Serial mode,
+A successful firmware transfer followed by a Maple USB-reset warning can be reported as `SUCCESS_WITH_WARNING` because the programming operation itself may have completed successfully.
 
-the upload is blocked.
+## Update Safety
 
-The controller also protects the confirmed firmware identity from changing while the confirmation dialog is open.
+The application blocks programming when:
 
-## GUI
+- No UB3 is detected.
+- The UB3 is disconnected.
+- The UB3 is not in Maple Serial mode.
+- A different UB3 is connected.
+- No firmware is selected.
+- The firmware file is missing.
+- Firmware validation fails.
+- The confirmed firmware identity changes.
+- Another update is already running.
 
-The Home page uses a two-column operator layout:
+A fresh device scan is performed immediately before upload so a stale COM port is not reused after a USB disconnect/reconnect.
 
-### Left column
+## Canceling an Update
 
-- Connection Status
-- Refresh control
-- Device Information
-- Operator instructions
+The application provides a Cancel action while an upload is active.
 
-### Right column
+Cancellation is handled through the existing upload process chain and process runner. The process is terminated and the worker reports the resulting cancellation state.
 
-- Firmware selection
-- Firmware details
-- Update controls
-- Upload status/log information
+Do not disconnect the UB3 intentionally during programming unless performing an approved hardware-recovery test.
 
-Both columns have independent vertical scrolling so the interface does not compress sections into each other on smaller windows.
+## Logs
 
-Update and Cancel actions use the application primary blue/white action styling.
+Application logs are stored under:
 
-## Firmware Repository
+```text
+logs/
+```
 
-Firmware packages are loaded from the configured local firmware repository.
-
-The firmware selector displays:
-
-- Package name
-- Version
-
-The firmware information area displays available metadata such as:
-
-- Target device
-- Release date
-- Filename
-- File size
-- Validation status
-
-The application does not fabricate unavailable device or firmware metadata.
-
-## Safety Controls
-
-The following conditions block programming:
-
-- No UB3 connected.
-- UB3 is not in Maple Serial mode.
-- Intended UB3 was replaced.
-- Intended UB3 was disconnected.
-- No firmware selected.
-- Firmware file does not exist.
-- Firmware file is invalid.
-- Firmware identity changes after confirmation.
-- Another upload is already running.
-
-## Development Milestones
-
-### Foundation
-
-- [x] Project structure
-- [x] Configuration system
-- [x] Firmware repository/service
-- [x] Device detection
-- [x] Maple Loader upload service
-- [x] UploadResult model
-- [x] ProcessRunner
-- [x] UploadWorker
-- [x] UpdateController
-
-### GUI
-
-- [x] Main Window
-- [x] Connection Status
-- [x] Device Information
-- [x] Firmware Selection
-- [x] Firmware version display
-- [x] Refresh action
-- [x] High-contrast Update/Cancel controls
-- [x] Independent Home page scrolling
-
-### Safe Update Workflow
-
-- [x] Step 4.1 — Pre-update safety validation
-- [x] Step 4.2 — Operator confirmation dialog
-- [x] Step 4.3 — Confirmation → second validation → UploadWorker gate
-- [x] Step 4.4 — UploadWorker progress/status integration
-- [x] Step 4.5 — Live progress UI with success/warning/failure presentation
-- [ ] Step 4.6 — Cancellation workflow
-- [ ] Step 4.7 — Disconnect handling during programming
-- [ ] Step 4.8 — Full end-to-end GUI integration tests
-- [ ] Step 4.9 — Controlled physical UB3 test
-- [ ] Step 4.10 — Release packaging and deployment
+The GUI also provides live upload output during programming.
 
 ## Testing
 
-Tests are designed to run without programming a physical UB3 unless a test is explicitly marked as a real hardware test.
+The project contains automated regression tests for the GUI, device handling, firmware validation, upload worker, Maple command generation, Maple resources, and process execution.
 
-Current regression tests include:
-
-```text
-tests/test_gui.py
-tests/test_gui_device_information.py
-tests/test_gui_layout.py
-tests/test_gui_firmware_selection.py
-tests/test_update_controller.py
-tests/test_pre_update_validation.py
-tests/test_update_confirmation_dialog.py
-tests/test_confirmation_update_workflow.py
-tests/test_upload_worker_streaming.py
-tests/test_gui_update_progress.py
-```
-
-Expected test environment:
+Activate the environment:
 
 ```powershell
 .venv\Scripts\activate
+```
+
+Run an individual test:
+
+```powershell
 python tests/test_gui.py
 ```
 
-Run the individual regression tests before committing changes.
+Run the complete regression suite from the project root:
 
-## Current Status
+```powershell
+$tests = @(
+    "tests/test_gui.py",
+    "tests/test_gui_device_information.py",
+    "tests/test_gui_layout.py",
+    "tests/test_gui_firmware_selection.py",
+    "tests/test_gui_update_progress.py",
+    "tests/test_pre_update_validation.py",
+    "tests/test_upload_worker.py",
+    "tests/test_upload_worker_streaming.py",
+    "tests/test_maple_resources.py",
+    "tests/test_maple_command_contract.py",
+    "tests/test_upload_service.py",
+    "tests/test_upload_integration.py",
+    "tests/test_process_runner_step_5_3.py",
+    "tests/test_maple_process_step_5_3.py",
+    "tests/test_maple_runtime_step_5_3.py"
+)
 
-**Safe update workflow through Step 4.5 is implemented and under test.**
+foreach ($test in $tests) {
+    Write-Host "RUNNING: $test"
+    python $test
 
-No physical UB3 should be programmed during unit or GUI regression testing.
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "FAILED: $test" -ForegroundColor Red
+        exit $LASTEXITCODE
+    }
 
-## Developer
+    Write-Host "PASSED: $test" -ForegroundColor Green
+}
+```
 
-Benjamin William
+Unless a test is explicitly identified as a hardware test, the regression suite does not program a physical UB3.
+
+## Development Architecture
+
+The application keeps hardware access and GUI responsibilities separated:
+
+```text
+HomePage
+   ↓
+UpdateController
+   ├── DeviceMonitor
+   ├── DeviceService
+   ├── FirmwareService
+   └── UploadWorker
+           ↓
+       UploadService
+           ↓
+       ProcessRunner
+           ↓
+       Maple Loader
+```
+
+The GUI does not execute Maple Loader directly.
+
+Device detection remains centralized in the existing device services and models. Firmware discovery remains centralized in the firmware service and repository. Upload execution remains isolated in the upload worker/service and process runner.
+
+## Troubleshooting
+
+### UB3 is not detected
+
+Check:
+
+1. USB cable and connection.
+2. Windows Device Manager.
+3. Whether the UB3 appears as the expected Maple Serial device.
+4. Whether another application has opened the COM port.
+5. Use the Home page **Refresh** action.
+
+### Update is disabled
+
+Check that:
+
+- A UB3 is detected.
+- The device is in Maple Serial mode.
+- Firmware is selected.
+- The selected firmware passes validation.
+
+### Maple Loader cannot be found
+
+Verify:
+
+```text
+resources/tools/maple/maple_upload.bat
+resources/tools/maple/maple_loader.jar
+resources/tools/maple/lib/jssc.jar
+```
+
+are present.
+
+### Firmware cannot be found
+
+Verify that the selected firmware exists under:
+
+```text
+resources/firmware/
+```
+
+and that its repository metadata references the correct binary file.
+
+## Operational Notes
+
+- Do not manually enter a COM port for normal operation.
+- Do not manually force the UB3 into DFU/bootloader mode before starting an update.
+- Verify the selected firmware before confirming the update.
+- Do not disconnect the UB3 during programming unless intentionally performing a controlled recovery test.
+- Use the bundled Maple runtime for normal application operation.
+- Keep firmware packages and their metadata together in the firmware repository.

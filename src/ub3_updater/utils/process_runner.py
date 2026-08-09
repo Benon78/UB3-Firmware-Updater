@@ -8,7 +8,7 @@ Developer:
 Benjamin William
 
 Description:
-Controlled Windows process execution for the UB3 updater.
+Controlled external-process execution for the UB3 updater.
 
 Responsibilities
 ----------------
@@ -18,6 +18,7 @@ Responsibilities
 • Stream process output
 • Handle timeout
 • Handle cancellation
+• Terminate Windows process trees safely
 • Return process results
 
 This module does NOT:
@@ -27,13 +28,26 @@ This module does NOT:
 • Control the GUI
 • Interpret Maple Loader output
 
+The existing application architecture is preserved:
+
+    UploadWorker
+        ↓
+    UploadService
+        ↓
+    ProcessRunner
+        ↓
+    maple_upload.bat
+        ↓
+    maple_loader.jar
+
 Version:
-0.5.2
+0.5.3
 =========================================================
 """
 
 from __future__ import annotations
 
+import os
 import subprocess
 import threading
 import time
@@ -53,6 +67,9 @@ from typing import Callable, Sequence
 class ProcessResult:
     """
     Result returned after an external process finishes.
+
+    This is an OS/process-level result. UploadService remains
+    responsible for interpreting Maple Loader output.
     """
 
     command: list[str]
@@ -75,15 +92,7 @@ class ProcessResult:
 
     @property
     def success(self) -> bool:
-        """
-        OS-level process success.
-
-        NOTE:
-        This does NOT mean firmware upload success.
-        UploadService interprets Maple Loader output
-        separately.
-        """
-
+        """Return True when the process completed successfully."""
         return (
             self.started
             and not self.timed_out
@@ -94,10 +103,7 @@ class ProcessResult:
 
     @property
     def failed(self) -> bool:
-        """
-        Return True when the process failed at OS level.
-        """
-
+        """Return True when the process failed at OS level."""
         return self.started and not self.success
 
 
@@ -107,8 +113,19 @@ class ProcessResult:
 
 class ProcessRunner:
     """
-    Controlled process runner used by the application
-    services.
+    Controlled process runner used by application services.
+
+    A single ProcessRunner instance owns at most one active
+    process. This matches UploadService's single-upload model.
+
+    Windows batch execution is intentionally performed with
+    shell=False. For a .bat file the caller supplies the
+    existing Windows wrapper explicitly, e.g.:
+
+        cmd.exe /d /c call maple_upload.bat ...
+
+    This keeps argument construction in UploadService and
+    process execution in this class.
     """
 
     def __init__(self):
@@ -125,12 +142,8 @@ class ProcessRunner:
 
     @property
     def is_running(self) -> bool:
-        """
-        Return True when a process is currently running.
-        """
-
+        """Return True when a process is currently running."""
         with self._lock:
-
             return (
                 self._process is not None
                 and self._process.poll() is None
@@ -152,37 +165,56 @@ class ProcessRunner:
         """
         Execute an external process.
 
-        command must be a sequence of arguments.
+        Parameters
+        ----------
+        command:
+            Ordered process arguments.
 
-        Example:
+        cwd:
+            Working directory for the process.
 
-            [
-                "cmd.exe",
-                "/d",
-                "/c",
-                "call",
-                r"C:\\tools\\maple_upload.bat",
-                "COM3",
-                "2",
-                "1EAF:003",
-                r"C:\\tmp\\firmware.bin",
-            ]
+        timeout:
+            Maximum process runtime in seconds.
+
+        on_output:
+            Callback for each stdout line.
+
+        on_error:
+            Callback for each stderr line.
+
+        Returns
+        -------
+        ProcessResult
+            Process-level execution result.
         """
-
-        # -------------------------------------------------
-        # Normalize command
-        # -------------------------------------------------
 
         command_list = [
             str(item)
             for item in command
         ]
 
+        if not command_list:
+            return ProcessResult(
+                command=[],
+                error="Process command cannot be empty.",
+            )
+
+        # -------------------------------------------------
+        # Prevent overlapping process ownership.
+        # -------------------------------------------------
+
+        if self.is_running:
+            return ProcessResult(
+                command=command_list,
+                error="Another process is already running.",
+            )
+
         result = ProcessResult(
             command=command_list.copy(),
         )
 
-        self._cancel_requested = False
+        with self._lock:
+            self._cancel_requested = False
 
         start_time = time.monotonic()
 
@@ -195,25 +227,39 @@ class ProcessRunner:
             working_directory = None
 
             if cwd is not None:
-
                 working_directory = str(
                     Path(cwd).resolve()
                 )
 
             # ---------------------------------------------
-            # Windows configuration
+            # Platform process configuration
             # ---------------------------------------------
 
             creation_flags = 0
+            popen_kwargs = {}
 
-            if hasattr(
-                subprocess,
-                "CREATE_NO_WINDOW",
-            ):
+            if os.name == "nt":
 
+                # Keep the Maple console hidden while creating a
+                # process group so timeout/cancel can terminate
+                # cmd.exe and the Java/Maple child process.
                 creation_flags = (
-                    subprocess.CREATE_NO_WINDOW
+                    getattr(
+                        subprocess,
+                        "CREATE_NO_WINDOW",
+                        0,
+                    )
+                    | getattr(
+                        subprocess,
+                        "CREATE_NEW_PROCESS_GROUP",
+                        0,
+                    )
                 )
+
+            else:
+
+                # Equivalent process-group ownership on POSIX.
+                popen_kwargs["start_new_session"] = True
 
             # ---------------------------------------------
             # Start process
@@ -241,10 +287,11 @@ class ProcessRunner:
                 creationflags=creation_flags,
 
                 shell=False,
+
+                **popen_kwargs,
             )
 
             with self._lock:
-
                 self._process = process
 
             result.started = True
@@ -254,7 +301,6 @@ class ProcessRunner:
             # ---------------------------------------------
 
             stdout_lines: list[str] = []
-
             stderr_lines: list[str] = []
 
             # ---------------------------------------------
@@ -268,6 +314,7 @@ class ProcessRunner:
                     stdout_lines,
                     on_output,
                 ),
+                name="UB3-ProcessRunner-stdout",
                 daemon=True,
             )
 
@@ -282,15 +329,15 @@ class ProcessRunner:
                     stderr_lines,
                     on_error,
                 ),
+                name="UB3-ProcessRunner-stderr",
                 daemon=True,
             )
 
             stdout_thread.start()
-
             stderr_thread.start()
 
             # ---------------------------------------------
-            # Wait
+            # Wait for process
             # ---------------------------------------------
 
             try:
@@ -308,19 +355,14 @@ class ProcessRunner:
                 return_code = process.wait()
 
             # ---------------------------------------------
-            # Wait for readers
+            # Wait for stream readers
             # ---------------------------------------------
 
-            stdout_thread.join(
-                timeout=2
-            )
-
-            stderr_thread.join(
-                timeout=2
-            )
+            stdout_thread.join(timeout=2)
+            stderr_thread.join(timeout=2)
 
             # ---------------------------------------------
-            # Store result
+            # Store process result
             # ---------------------------------------------
 
             result.return_code = return_code
@@ -333,9 +375,10 @@ class ProcessRunner:
                 stderr_lines
             )
 
-            result.cancelled = (
-                self._cancel_requested
-            )
+            with self._lock:
+                result.cancelled = (
+                    self._cancel_requested
+                )
 
         except FileNotFoundError as exc:
 
@@ -384,10 +427,13 @@ class ProcessRunner:
     ) -> None:
         """
         Read a process stream line-by-line.
+
+        Callback failures are intentionally isolated from the
+        process reader so a GUI/logging callback cannot break
+        stdout/stderr collection.
         """
 
         if stream is None:
-
             return
 
         try:
@@ -398,22 +444,30 @@ class ProcessRunner:
             ):
 
                 if not line:
-
                     break
 
                 lines.append(line)
 
-                clean_line = (
-                    line.rstrip("\r\n")
+                clean_line = line.rstrip(
+                    "\r\n"
                 )
 
                 if callback is not None:
 
-                    callback(clean_line)
+                    try:
+                        callback(clean_line)
+
+                    except Exception:
+                        # Output consumers must never terminate
+                        # process collection.
+                        pass
 
         finally:
 
-            stream.close()
+            try:
+                stream.close()
+            except Exception:
+                pass
 
     # =====================================================
     # Cancel
@@ -421,57 +475,144 @@ class ProcessRunner:
 
     def cancel(self) -> bool:
         """
-        Request cancellation of the running process.
-        """
+        Cancel the currently running process.
 
-        self._cancel_requested = True
-
-        return self._terminate_process()
-
-    # =====================================================
-    # Termination
-    # =====================================================
-
-    def _terminate_process(self) -> bool:
-        """
-        Terminate the current process.
+        Returns True only when an active process existed and
+        termination was requested.
         """
 
         with self._lock:
 
             process = self._process
 
+            if (
+                process is None
+                or process.poll() is not None
+            ):
+                return False
+
+            self._cancel_requested = True
+
+        return self._terminate_process(
+            process=process
+        )
+
+    # =====================================================
+    # Termination
+    # =====================================================
+
+    def _terminate_process(
+        self,
+        process: subprocess.Popen | None = None,
+    ) -> bool:
+        """
+        Terminate the active process.
+
+        On Windows the Maple uploader is normally launched as:
+
+            cmd.exe
+                └── maple_upload.bat
+                      └── java.exe
+                            └── maple_loader.jar
+
+        Terminating only cmd.exe can leave Java running. Therefore
+        Windows uses taskkill /T /F for process-tree termination.
+        A normal terminate/kill fallback remains available.
+        """
+
         if process is None:
 
+            with self._lock:
+                process = self._process
+
+        if process is None:
             return False
 
         if process.poll() is not None:
-
             return False
 
         try:
 
-            process.terminate()
+            if os.name == "nt":
 
+                # /T = terminate child processes
+                # /F = force termination
+                taskkill = subprocess.run(
+                    [
+                        "taskkill",
+                        "/PID",
+                        str(process.pid),
+                        "/T",
+                        "/F",
+                    ],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    stdin=subprocess.DEVNULL,
+                    check=False,
+                    creationflags=getattr(
+                        subprocess,
+                        "CREATE_NO_WINDOW",
+                        0,
+                    ),
+                )
+
+                if process.poll() is None:
+                    try:
+                        process.wait(timeout=2)
+                    except subprocess.TimeoutExpired:
+                        process.kill()
+                        process.wait(timeout=2)
+
+                return (
+                    taskkill.returncode == 0
+                    or process.poll() is not None
+                )
+
+            # POSIX process group.
             try:
+                import os as _os
 
-                process.wait(
-                    timeout=2
+                _os.killpg(
+                    process.pid,
+                    _os.SIGTERM,
                 )
 
-            except subprocess.TimeoutExpired:
+                process.wait(timeout=2)
 
-                process.kill()
+            except Exception:
 
-                process.wait(
-                    timeout=2
-                )
+                process.terminate()
+
+                try:
+                    process.wait(timeout=2)
+
+                except subprocess.TimeoutExpired:
+
+                    process.kill()
+                    process.wait(timeout=2)
 
             return True
 
         except Exception:
 
-            return False
+            try:
+
+                process.terminate()
+                process.wait(timeout=2)
+
+                return True
+
+            except Exception:
+
+                try:
+                    process.kill()
+                    process.wait(timeout=2)
+
+                    return True
+
+                except Exception:
+
+                    return False
 
     # =====================================================
     # Cleanup
@@ -479,7 +620,7 @@ class ProcessRunner:
 
     def cleanup(self) -> None:
         """
-        Terminate any remaining process.
+        Terminate any remaining process tree.
         """
 
         self._terminate_process()

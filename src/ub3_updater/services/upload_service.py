@@ -74,6 +74,10 @@ from ub3_updater.services.config_service import (
     ConfigService,
 )
 
+from ub3_updater.services.maple_resource_service import (
+    MapleResourceService,
+)
+
 
 class UploadService:
     """
@@ -668,7 +672,15 @@ class UploadService:
 
     def _validate_uploader(self) -> str | None:
         """
-        Verify maple_upload.bat exists.
+        Verify the Maple uploader and, when using the bundled
+        project runtime, verify the complete Maple resource set.
+
+        The production uploader is resolved from:
+
+            resources/tools/maple/
+
+        A caller may still inject another uploader_path for
+        controlled tests or development integration tests.
         """
 
         if not self.uploader_path.exists():
@@ -684,6 +696,41 @@ class UploadService:
                 "Maple uploader path is not a file: "
                 f"{self.uploader_path}"
             )
+
+        # -------------------------------------------------
+        # Bundled runtime validation
+        # -------------------------------------------------
+
+        configured_uploader = (
+            ConfigService.maple_uploader()
+            .resolve()
+        )
+
+        if self.uploader_path == configured_uploader:
+
+            validation = (
+                MapleResourceService(
+                    resource_root=configured_uploader.parent
+                ).validate()
+            )
+
+            if not validation.valid:
+
+                details = ""
+
+                if validation.missing_files:
+
+                    details = (
+                        " Missing: "
+                        + ", ".join(
+                            validation.missing_files
+                        )
+                    )
+
+                return (
+                    "Bundled Maple Loader runtime is "
+                    f"incomplete.{details}"
+                )
 
         return None
 
@@ -1082,32 +1129,15 @@ class UploadService:
     @classmethod
     def resolve_default_uploader(cls) -> Path:
         """
-        Resolve the Maple uploader.
+        Resolve the production Maple uploader from the bundled
+        project resources.
 
-        Priority
-        --------
-        1. Project-local Maple uploader.
-        2. Existing development Arduino installation.
-
-        If neither exists, return the configured project-local
-        path so UploadService can report the missing uploader
-        through its normal validation flow instead of failing
-        during object construction.
+        The previous development Arduino installation is not used
+        as a runtime fallback. It was only part of manual/development
+        testing and must not become a deployment dependency.
         """
 
-        project_uploader = (
+        return (
             ConfigService.maple_uploader()
+            .resolve()
         )
-
-        if project_uploader.is_file():
-
-            return project_uploader.resolve()
-
-        if cls.DEVELOPMENT_MAPLE_UPLOADER.is_file():
-
-            return (
-                cls.DEVELOPMENT_MAPLE_UPLOADER
-                .resolve()
-            )
-
-        return project_uploader.resolve()

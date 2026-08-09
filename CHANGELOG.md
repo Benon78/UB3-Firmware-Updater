@@ -1,3 +1,39 @@
+# Changelog
+
+## 2026-08-09 — Step 5.3 Process Execution and Bundled Runtime Integration
+
+### Changed
+
+- Hardened the existing `ProcessRunner` execution boundary for external Maple Loader processes.
+- Added controlled stdout and stderr streaming through the existing upload architecture.
+- Added timeout handling and process termination.
+- Added cancellation handling and Windows process-tree cleanup for `cmd.exe` → batch → Java/Maple Loader execution.
+- Preserved concurrent-process protection and cleanup behavior.
+- Updated the upload integration test to use the bundled project Maple runtime at `resources/tools/maple/maple_upload.bat`.
+- Removed the development-machine Arduino installation as a dependency of the upload integration test.
+- Kept the existing `ConfigService`, `DeviceService`, `FirmwareService`, `UpdateController`, `UploadWorker`, `UploadService`, and `ProcessRunner` architecture unchanged.
+- Confirmed that `C:\tmp` is not required by the application upload path.
+
+### Verified
+
+- Process startup and return-code propagation.
+- stdout and stderr streaming.
+- Working-directory propagation.
+- Timeout handling.
+- Cancellation.
+- Concurrent execution protection.
+- Process cleanup.
+- Maple command argument propagation through the Windows batch boundary.
+- Bundled Maple uploader resolution.
+
+### Tests
+
+- `tests/test_process_runner_step_5_3.py` — PASS
+- `tests/test_maple_process_step_5_3.py` — PASS
+- `tests/test_maple_runtime_step_5_3.py` — PASS
+- Full regression suite — PASS
+- No physical UB3 was programmed by the Step 5.3 regression suite.
+
 ## Step 5.2 - Maple Command Integration
 
 - Preserved the existing device detection, controller, worker, and upload-service architecture.
