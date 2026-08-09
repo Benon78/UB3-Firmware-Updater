@@ -129,3 +129,16 @@ The current Maple Loader workflow starts from Maple Serial mode and performs the
 - Disable Update when the device disconnects
 - Add GUI regression tests
 - Preserve existing UploadService, UploadWorker and UpdateController architecture
+
+## 2026-08-09 - GUI Step 2 - Device Information
+
+- Added Device Information panel to the Home screen.
+- Displays detected COM port, USB mode, VID:PID, manufacturer and hardware ID.
+- Unavailable firmware/bootloader metadata is explicitly shown as Not reported.
+- Added device information GUI regression tests.
+
+## 2026-08-09 - GUI UX Step 1.1
+
+- Improved button contrast and explicit action colours.
+- Improved firmware selector to show package name and version.
+- Added GUI UX regression coverage.

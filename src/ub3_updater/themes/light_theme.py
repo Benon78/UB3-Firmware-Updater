@@ -81,6 +81,63 @@ QPushButton:disabled {{
     color: #6B7280;
 }}
 
+
+QPushButton#updateButton {{
+    background: {SUCCESS};
+    color: white;
+    border: 1px solid #059669;
+    border-radius: {BUTTON_RADIUS}px;
+    min-height: 44px;
+    min-width: 140px;
+    padding: 0 20px;
+    font-size: 11pt;
+    font-weight: 700;
+}}
+QPushButton#updateButton:hover {{
+    background: #059669;
+}}
+QPushButton#updateButton:pressed {{
+    background: #047857;
+}}
+QPushButton#updateButton:disabled {{
+    background: #D1D5DB;
+    color: #6B7280;
+    border-color: #D1D5DB;
+}}
+
+QPushButton#cancelButton {{
+    background: {ERROR};
+    color: white;
+    border: 1px solid #DC2626;
+    border-radius: {BUTTON_RADIUS}px;
+    min-height: 44px;
+    min-width: 120px;
+    padding: 0 18px;
+    font-weight: 700;
+}}
+QPushButton#cancelButton:hover {{
+    background: #DC2626;
+}}
+QPushButton#cancelButton:pressed {{
+    background: #B91C1C;
+}}
+QPushButton#cancelButton:disabled {{
+    background: #D1D5DB;
+    color: #6B7280;
+    border-color: #D1D5DB;
+}}
+
+QPushButton#refreshButton {{
+    background: white;
+    color: {PRIMARY_DARK};
+    border: 1px solid {PRIMARY};
+    min-height: 38px;
+    min-width: 38px;
+}}
+QPushButton#refreshButton:hover {{
+    background: {INFO_BACKGROUND};
+}}
+
 QPushButton[class="secondary"] {{
     background: white;
     color: {PRIMARY};
@@ -110,7 +167,14 @@ QLineEdit {{
 
 QComboBox:focus,
 QLineEdit:focus {{
-    border: 1px solid {PRIMARY};
+    border: 2px solid {PRIMARY};
+}}
+QComboBox QAbstractItemView {{
+    background: white;
+    color: {TEXT};
+    border: 1px solid {BORDER};
+    selection-background-color: {PRIMARY};
+    selection-color: white;
 }}
 
 QComboBox:disabled {{

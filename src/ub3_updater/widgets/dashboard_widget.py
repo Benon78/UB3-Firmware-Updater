@@ -92,7 +92,8 @@ class DashboardWidget(QFrame):
         layout.addWidget(firmware_title)
 
         self.firmware_combo = QComboBox()
-        self.firmware_combo.setMinimumHeight(38)
+        self.firmware_combo.setObjectName("firmwareCombo")
+        self.firmware_combo.setMinimumHeight(42)
         self.firmware_combo.currentIndexChanged.connect(
             self._firmware_index_changed
         )
@@ -159,15 +160,15 @@ class DashboardWidget(QFrame):
         buttons.addStretch()
 
         self.cancel_button = QPushButton("Cancel")
-        self.cancel_button.setProperty("class", "danger")
+        self.cancel_button.setObjectName("cancelButton")
         self.cancel_button.setEnabled(False)
         self.cancel_button.clicked.connect(
             self.cancel_requested.emit
         )
         buttons.addWidget(self.cancel_button)
 
-        self.update_button = QPushButton("Update")
-        self.update_button.setProperty("class", "success")
+        self.update_button = QPushButton("UPDATE")
+        self.update_button.setObjectName("updateButton")
         self.update_button.setMinimumWidth(130)
         self.update_button.clicked.connect(
             self.update_requested.emit
@@ -193,8 +194,13 @@ class DashboardWidget(QFrame):
         self.firmware_combo.clear()
 
         for firmware in self._firmwares:
+            label = (
+                f"{firmware.name} — Version {firmware.version}"
+                if firmware.name and firmware.version
+                else firmware.display_name
+            )
             self.firmware_combo.addItem(
-                firmware.display_name,
+                label,
                 firmware,
             )
 

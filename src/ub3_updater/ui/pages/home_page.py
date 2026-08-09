@@ -32,6 +32,9 @@ from ub3_updater.widgets.connection_status import (
 from ub3_updater.widgets.dashboard_widget import (
     DashboardWidget,
 )
+from ub3_updater.widgets.device_information import (
+    DeviceInformationWidget,
+)
 from ub3_updater.widgets.instruction_widget import (
     InstructionWidget,
 )
@@ -95,6 +98,10 @@ class HomePage(BasePage):
             ConnectionStatusWidget()
         )
 
+        self.device_information_widget = (
+            DeviceInformationWidget()
+        )
+
         self.instruction_widget = (
             InstructionWidget()
         )
@@ -105,6 +112,10 @@ class HomePage(BasePage):
 
         left.addWidget(
             self.connection_widget
+        )
+
+        left.addWidget(
+            self.device_information_widget
         )
 
         left.addWidget(
@@ -205,6 +216,10 @@ class HomePage(BasePage):
         device: Device | None,
     ):
         self.connection_widget.update_device(
+            device
+        )
+
+        self.device_information_widget.update_device(
             device
         )
 

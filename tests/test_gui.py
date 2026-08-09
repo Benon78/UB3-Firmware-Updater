@@ -196,6 +196,7 @@ window = MainWindow(
 assert window.home_page is not None
 assert window.home_page.connection_widget is not None
 assert window.home_page.dashboard_widget is not None
+assert window.home_page.device_information_widget is not None
 
 print("[PASS] MainWindow created")
 print("[PASS] HomePage created")
@@ -253,6 +254,87 @@ assert not (
 print("[PASS] Waiting for UB3")
 print("[PASS] Update disabled without device")
 
+
+# ---------------------------------------------------------
+# Device information - GUI Step 2
+# ---------------------------------------------------------
+
+print()
+print("TEST 3A - DEVICE INFORMATION WIDGET")
+print("=" * 70)
+
+assert window.home_page.device_information_widget is not None
+
+info_widget = (
+    window.home_page.device_information_widget
+)
+
+# Disconnected state must not invent device metadata.
+info_widget.set_disconnected()
+
+assert (
+    info_widget._value_labels["firmware_version"].text()
+    == "Not reported"
+)
+
+assert (
+    info_widget._value_labels["bootloader_version"].text()
+    == "Not reported"
+)
+
+# Simulate the actual Maple Serial device observed during
+# development/testing.
+device = Device(
+    connected=True,
+    state=DeviceState.MAPLE_SERIAL,
+    com_port="COM3",
+    usb_name="Maple Serial (COM3)",
+    description="Maple Serial (COM3)",
+    manufacturer="LeafLabs, LLC",
+    vid="1EAF",
+    pid="0004",
+    hwid="USB VID:PID=1EAF:0004 SER= LOCATION=1-6",
+)
+
+window.home_page.update_device(device)
+
+assert (
+    info_widget._value_labels["device_name"].text()
+    == "UB3"
+)
+
+assert (
+    info_widget._value_labels["com_port"].text()
+    == "COM3"
+)
+
+assert (
+    info_widget._value_labels["usb_mode"].text()
+    == "Maple Serial"
+)
+
+assert (
+    info_widget._value_labels["vid_pid"].text()
+    == "1EAF:0004"
+)
+
+assert (
+    info_widget._value_labels["manufacturer"].text()
+    == "LeafLabs, LLC"
+)
+
+assert (
+    info_widget._value_labels["firmware_version"].text()
+    == "Not reported"
+)
+
+print("[PASS] Device Information widget created")
+print("[PASS] Device information populated from Device model")
+print("[PASS] COM3 displayed")
+print("[PASS] Maple Serial displayed")
+print("[PASS] VID:PID displayed")
+print("[PASS] Manufacturer displayed")
+print("[PASS] Unavailable firmware data is not fabricated")
 
 # ---------------------------------------------------------
 # Firmware selection
@@ -363,6 +445,13 @@ assert (
 )
 
 print("[PASS] Update button enabled when ready")
+assert window.home_page.dashboard_widget.update_button.objectName() == "updateButton"
+assert window.home_page.dashboard_widget.cancel_button.objectName() == "cancelButton"
+assert "Version" in window.home_page.dashboard_widget.firmware_combo.itemText(0)
+print("[PASS] Update button uses explicit high-contrast styling")
+print("[PASS] Cancel button uses explicit high-contrast styling")
+print("[PASS] Firmware dropdown includes version")
+
 
 
 # ---------------------------------------------------------
