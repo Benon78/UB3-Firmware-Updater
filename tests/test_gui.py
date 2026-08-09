@@ -104,6 +104,7 @@ class FakeController(UpdateController):
         self.last_result = None
         self.last_error = None
         self.status_message = "Waiting for UB3"
+        self.refresh_count = 0
 
         self._started = False
 
@@ -138,6 +139,7 @@ class FakeController(UpdateController):
         self._started = False
 
     def refresh_device(self):
+        self.refresh_count += 1
         return self.device
 
     def select_firmware(self, firmware):
@@ -202,6 +204,15 @@ print("[PASS] MainWindow created")
 print("[PASS] HomePage created")
 print("[PASS] Connection widget created")
 print("[PASS] Dashboard widget created")
+
+assert window.home_page.refresh_button is (
+    window.home_page.connection_widget.refresh_button
+)
+assert (
+    window.home_page.refresh_button.objectName()
+    == "refreshButton"
+)
+print("[PASS] Home page refresh button created")
 
 
 # ---------------------------------------------------------
@@ -446,6 +457,22 @@ assert (
 
 print("[PASS] Update button enabled when ready")
 assert window.home_page.dashboard_widget.update_button.objectName() == "updateButton"
+
+# ---------------------------------------------------------
+# Refresh
+# ---------------------------------------------------------
+
+# MainWindow performs one automatic device scan during startup.
+# Reset the test counter so this assertion measures only the
+# operator pressing the Refresh button.
+
+controller.refresh_count = 0
+
+window.home_page.refresh_button.click()
+
+assert controller.refresh_count == 1
+
+print("[PASS] Refresh button triggers device refresh")
 assert window.home_page.dashboard_widget.cancel_button.objectName() == "cancelButton"
 assert "Version" in window.home_page.dashboard_widget.firmware_combo.itemText(0)
 print("[PASS] Update button uses explicit high-contrast styling")

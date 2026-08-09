@@ -83,9 +83,9 @@ QPushButton:disabled {{
 
 
 QPushButton#updateButton {{
-    background: {SUCCESS};
+    background: {PRIMARY};
     color: white;
-    border: 1px solid #059669;
+    border: 1px solid {PRIMARY_DARK};
     border-radius: {BUTTON_RADIUS}px;
     min-height: 44px;
     min-width: 140px;
@@ -94,10 +94,10 @@ QPushButton#updateButton {{
     font-weight: 700;
 }}
 QPushButton#updateButton:hover {{
-    background: #059669;
+    background: #1D4ED8;
 }}
 QPushButton#updateButton:pressed {{
-    background: #047857;
+    background: {PRIMARY_DARK};
 }}
 QPushButton#updateButton:disabled {{
     background: #D1D5DB;
@@ -106,9 +106,9 @@ QPushButton#updateButton:disabled {{
 }}
 
 QPushButton#cancelButton {{
-    background: {ERROR};
+    background: {PRIMARY};
     color: white;
-    border: 1px solid #DC2626;
+    border: 1px solid {PRIMARY_DARK};
     border-radius: {BUTTON_RADIUS}px;
     min-height: 44px;
     min-width: 120px;
@@ -116,10 +116,10 @@ QPushButton#cancelButton {{
     font-weight: 700;
 }}
 QPushButton#cancelButton:hover {{
-    background: #DC2626;
+    background: #1D4ED8;
 }}
 QPushButton#cancelButton:pressed {{
-    background: #B91C1C;
+    background: {PRIMARY_DARK};
 }}
 QPushButton#cancelButton:disabled {{
     background: #D1D5DB;
@@ -128,14 +128,25 @@ QPushButton#cancelButton:disabled {{
 }}
 
 QPushButton#refreshButton {{
-    background: white;
-    color: {PRIMARY_DARK};
-    border: 1px solid {PRIMARY};
+    background: {PRIMARY};
+    color: white;
+    border: 1px solid {PRIMARY_DARK};
+    border-radius: {BUTTON_RADIUS}px;
     min-height: 38px;
-    min-width: 38px;
+    min-width: 90px;
+    padding: 0 14px;
+    font-weight: 700;
 }}
 QPushButton#refreshButton:hover {{
-    background: {INFO_BACKGROUND};
+    background: #1D4ED8;
+}}
+QPushButton#refreshButton:pressed {{
+    background: {PRIMARY_DARK};
+}}
+QPushButton#refreshButton:disabled {{
+    background: #D1D5DB;
+    color: #6B7280;
+    border-color: #D1D5DB;
 }}
 
 QPushButton[class="secondary"] {{

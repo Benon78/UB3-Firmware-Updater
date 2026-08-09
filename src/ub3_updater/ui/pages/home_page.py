@@ -128,6 +128,10 @@ class HomePage(BasePage):
         right.setSpacing(14)
 
         self.connection_widget = ConnectionStatusWidget()
+        # HomePage-level reference to the operator refresh control.
+        # The button remains owned by ConnectionStatusWidget so the
+        # connection card keeps the refresh action next to device state.
+        self.refresh_button = self.connection_widget.refresh_button
         self.connection_widget.setSizePolicy(
             QSizePolicy.Policy.Preferred,
             QSizePolicy.Policy.Fixed,

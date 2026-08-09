@@ -1,3 +1,12 @@
+## 2026-08-09 - Step 4 Baseline - Home Page Action Controls
+
+- Promoted the Home page device refresh control as a HomePage-level reference while keeping ownership in the Connection Status card.
+- Changed the Refresh button to an explicit blue primary action with white text.
+- Changed the Update button to the primary blue action colour with white text.
+- Changed the Cancel button to the same blue action colour with white text for consistent operator controls.
+- Added GUI regression coverage confirming the Home page Refresh button invokes device refresh.
+- Preserved the existing independent Home page scrolling and firmware-selection behavior.
+
 ## 2026-08-09 - GUI Step 3 Test Harness Fix
 
 - Updated GUI test controller stubs to implement the MainWindow callback registration contract.
@@ -18,6 +27,39 @@
 - Added firmware selection regression tests.
 
 # Changelog
+
+## Step 4.2 — Update Confirmation Dialog
+
+- Added a dedicated, operator-focused firmware update confirmation dialog.
+- Displays the validated UB3 identity and connection details.
+- Displays the validated firmware name, version, target, file, and size.
+- Shows a clear pre-update validation success state.
+- Requires explicit operator acknowledgement before enabling `Update UB3`.
+- Uses the established blue/white action-button styling.
+- Dialog is presentation-only and never starts `UploadWorker`.
+- Added isolated confirmation-dialog tests.
+
+
+## Step 4.1 Validation Fix
+
+- Fixed pre-update validation so a fresh USB scan returning no device is treated as a real disconnect.
+- Removed stale-device fallback after an authoritative scan result.
+- Prevents an update from proceeding when the intended UB3 has been unplugged.
+- Existing GUI and controller behavior remains unchanged.
+
+
+## Step 4.1 — Pre-Update Safety Validation
+
+- Added `PreUpdateValidationResult` model for final update safety checks.
+- Added `UpdateController.validate_before_update()`.
+- Performs a fresh device scan before programming.
+- Verifies the UB3 is connected in Maple Serial mode.
+- Verifies the connected device matches the device captured before confirmation.
+- Re-validates the selected firmware file immediately before update.
+- Blocks the update when the intended UB3 is disconnected or replaced.
+- Added `tests/test_pre_update_validation.py`.
+- No physical UB3 programming is performed by the new tests.
+
 
 All notable changes to this project will be documented in this file.
 

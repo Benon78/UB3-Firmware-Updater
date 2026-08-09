@@ -108,9 +108,11 @@ class ConnectionStatusWidget(QFrame):
         )
         row.addWidget(self.com_badge)
 
-        self.refresh_button = QPushButton("↻")
+        self.refresh_button = QPushButton("Refresh")
         self.refresh_button.setToolTip("Refresh device detection")
-        self.refresh_button.setFixedSize(38, 38)
+        self.refresh_button.setObjectName("refreshButton")
+        self.refresh_button.setMinimumHeight(38)
+        self.refresh_button.setMinimumWidth(90)
         self.refresh_button.clicked.connect(
             self.refresh_requested.emit
         )

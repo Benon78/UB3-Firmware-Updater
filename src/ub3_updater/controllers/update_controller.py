@@ -66,6 +66,9 @@ from typing import Any, Callable
 from ub3_updater.models.device import Device
 from ub3_updater.models.firmware import Firmware
 from ub3_updater.models.upload_result import UploadResult
+from ub3_updater.models.pre_update_validation import (
+    PreUpdateValidationResult,
+)
 from ub3_updater.workers.upload_worker import (
     UploadWorker,
     UploadWorkerState,
@@ -674,6 +677,262 @@ class UpdateController:
             return False
 
         return True
+
+    # =====================================================
+    # Pre-update Validation
+    # =====================================================
+
+    def validate_before_update(
+        self,
+        expected_device: Device | None = None,
+    ) -> PreUpdateValidationResult:
+        """
+        Perform the final safety checks immediately before an update.
+
+        The validation deliberately performs a fresh device scan instead
+        of trusting the device object held by the GUI. This prevents a
+        different UB3 from being programmed if the operator disconnects
+        the original unit and connects another one before confirmation.
+
+        Parameters
+        ----------
+        expected_device:
+            The device the operator originally selected/confirmed. When
+            supplied, the freshly scanned device must match it using the
+            Device.same_device() identity comparison.
+        """
+
+        checks: dict[str, bool] = {
+            "device_connected": False,
+            "maple_serial": False,
+            "same_device": False,
+            "firmware_selected": False,
+            "firmware_valid": False,
+        }
+
+        # -------------------------------------------------
+        # Never validate for a second update while one runs.
+        # -------------------------------------------------
+
+        if self.is_uploading:
+            return PreUpdateValidationResult(
+                valid=False,
+                message=(
+                    "A firmware update is already running."
+                ),
+                device=self.device,
+                firmware=self.selected_firmware,
+                checks=checks,
+            )
+
+        # -------------------------------------------------
+        # Fresh device scan.
+        # -------------------------------------------------
+
+        current_device = None
+
+        if self.device_monitor is not None:
+
+            service = getattr(
+                self.device_monitor,
+                "service",
+                None,
+            )
+
+            scan = getattr(
+                service,
+                "scan",
+                None,
+            ) if service is not None else None
+
+            if callable(scan):
+                current_device = scan()
+
+        # Only fall back to the controller's tracked device when a
+        # fresh scan is genuinely unavailable. A scan that returns
+        # None is an authoritative "no device found" result and must
+        # NOT fall back to the stale device object. Otherwise an
+        # operator could disconnect the intended UB3 and the updater
+        # would incorrectly continue using the old device state.
+        scan_available = (
+            self.device_monitor is not None
+            and getattr(
+                getattr(
+                    self.device_monitor,
+                    "service",
+                    None,
+                ),
+                "scan",
+                None,
+            ) is not None
+        )
+
+        if current_device is None and not scan_available:
+            current_device = self.device
+
+        if current_device is None or not getattr(
+            current_device,
+            "connected",
+            False,
+        ):
+            self._handle_device_changed(None)
+            return PreUpdateValidationResult(
+                valid=False,
+                message=(
+                    "UB3 is no longer connected. "
+                    "Reconnect the intended UB3 and try again."
+                ),
+                device=None,
+                firmware=self.selected_firmware,
+                checks=checks,
+            )
+
+        checks["device_connected"] = True
+
+        # -------------------------------------------------
+        # Device must be Maple Serial.
+        # -------------------------------------------------
+
+        checks["maple_serial"] = (
+            self._is_update_ready_device(
+                current_device
+            )
+        )
+
+        if not checks["maple_serial"]:
+            self._handle_device_changed(
+                current_device
+            )
+            return PreUpdateValidationResult(
+                valid=False,
+                message=(
+                    "UB3 must be connected in Maple Serial "
+                    "mode before firmware update."
+                ),
+                device=current_device,
+                firmware=self.selected_firmware,
+                checks=checks,
+            )
+
+        # -------------------------------------------------
+        # If the caller supplied the device captured before
+        # confirmation, require the same physical identity.
+        # -------------------------------------------------
+
+        if expected_device is None:
+            checks["same_device"] = True
+        else:
+            checks["same_device"] = (
+                expected_device.same_device(
+                    current_device
+                )
+            )
+
+        if not checks["same_device"]:
+            self._handle_device_changed(
+                current_device
+            )
+            return PreUpdateValidationResult(
+                valid=False,
+                message=(
+                    "The connected UB3 is different from "
+                    "the device selected for this update. "
+                    "Confirm the intended UB3 and try again."
+                ),
+                device=current_device,
+                firmware=self.selected_firmware,
+                checks=checks,
+            )
+
+        # -------------------------------------------------
+        # Firmware selection.
+        # -------------------------------------------------
+
+        firmware = self.selected_firmware
+
+        if firmware is None:
+            return PreUpdateValidationResult(
+                valid=False,
+                message=(
+                    "No firmware has been selected."
+                ),
+                device=current_device,
+                firmware=None,
+                checks=checks,
+            )
+
+        checks["firmware_selected"] = True
+
+        # -------------------------------------------------
+        # Validate the actual firmware file again.
+        # -------------------------------------------------
+
+        validate = getattr(
+            self.firmware_service,
+            "validate",
+            None,
+        )
+
+        if not callable(validate):
+            return PreUpdateValidationResult(
+                valid=False,
+                message=(
+                    "Firmware validation service is unavailable."
+                ),
+                device=current_device,
+                firmware=firmware,
+                checks=checks,
+            )
+
+        try:
+            firmware_valid, firmware_error = validate(
+                firmware
+            )
+        except Exception as exc:
+            return PreUpdateValidationResult(
+                valid=False,
+                message=(
+                    "Unable to validate firmware: "
+                    f"{exc}"
+                ),
+                device=current_device,
+                firmware=firmware,
+                checks=checks,
+            )
+
+        checks["firmware_valid"] = bool(
+            firmware_valid
+        )
+
+        if not firmware_valid:
+            return PreUpdateValidationResult(
+                valid=False,
+                message=(
+                    firmware_error
+                    or "Selected firmware is invalid."
+                ),
+                device=current_device,
+                firmware=firmware,
+                checks=checks,
+            )
+
+        # -------------------------------------------------
+        # Validation passed. Synchronize controller state
+        # with the freshly scanned device.
+        # -------------------------------------------------
+
+        self.device = current_device
+
+        return PreUpdateValidationResult(
+            valid=True,
+            message=(
+                "UB3 and firmware passed the pre-update "
+                "validation checks."
+            ),
+            device=current_device,
+            firmware=firmware,
+            checks=checks,
+        )
 
     # =====================================================
     # Update
