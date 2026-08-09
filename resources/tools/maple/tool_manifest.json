@@ -1,0 +1,13 @@
+{
+    "name": "Maple Loader",
+    "platform": "windows",
+    "entrypoint": "maple_upload.bat",
+    "loader": "maple_loader.jar",
+    "java_required": true,
+    "required_files": [
+        "maple_upload.bat",
+        "maple_loader.jar",
+        "lib/jssc.jar"
+    ],
+    "source": "Arduino_STM32.zip"
+}

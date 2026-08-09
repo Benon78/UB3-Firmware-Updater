@@ -1,3 +1,20 @@
+## Step 5.2 - Maple Command Integration
+
+- Preserved the existing device detection, controller, worker, and upload-service architecture.
+- Maple command now passes the selected firmware repository path directly.
+- Removed application dependence on `C:\\tmp`; that path remains only historical manual-CMD context.
+- Verified exact Maple argument order: COM port, ALT ID `2`, DFU ID `1EAF:003`, firmware path.
+- Added Step 5.2 command-contract regression coverage.
+
+## Step 5.1 - Maple Runtime Resource Integration
+
+- Added bundled Windows Maple Loader runtime resources from the supplied Arduino STM32 package.
+- Added `tool_manifest.json` for runtime resource identification.
+- Added `MapleResourceService` for safe pre-execution resource validation.
+- Added explicit operator-action button styling for Update, Cancel, and Refresh controls.
+- Added Step 5.1 resource and button-style tests.
+- No physical UB3 programming is performed by Step 5.1.
+
 # Changelog
 
 ## Step 4.5 — Live Update Progress UI

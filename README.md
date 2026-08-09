@@ -1,3 +1,26 @@
+## Step 5.2 - Maple Command Integration
+
+Step 5.2 preserves the existing detection and upload architecture. The application uses the existing `ConfigService`, `FirmwareService`, `DeviceService`, `UpdateController`, `UploadWorker`, and `UploadService` chain.
+
+The Maple command contract is:
+
+`maple_upload COM3 2 1EAF:003 <firmware>`
+
+The COM port is obtained from the existing fresh `DeviceService.scan()` performed by `UploadService`. The firmware path comes directly from `resources/firmware/`. The earlier `C:\\tmp` location was only a manual CMD staging location and is not used by the application.
+
+Step 5.2 does not execute Maple Loader or program a physical UB3.
+
+## Step 5.1 - Maple Runtime Resources
+
+The project now contains the minimal Windows Maple Loader runtime required for the next hardware-integration stage:
+
+- `resources/tools/maple/maple_upload.bat`
+- `resources/tools/maple/maple_loader.jar`
+- `resources/tools/maple/lib/jssc.jar`
+- `resources/tools/maple/tool_manifest.json`
+
+Step 5.1 validates resource completeness only. It does not execute Maple Loader and does not program a physical UB3.
+
 ## Step 4.5 — Live Update Progress UI
 
 The GUI now presents a dedicated operator-facing update progress panel while firmware programming is active.

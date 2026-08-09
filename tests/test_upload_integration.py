@@ -732,14 +732,15 @@ upload_firmware = Path(
 
 
 assert (
-    upload_firmware.parent
-    == service.TEMP_FIRMWARE_DIR.resolve()
+    upload_firmware
+    == SOURCE_FIRMWARE.resolve()
 ), (
-    "Firmware was not staged in C:\\tmp."
+    "Firmware command argument does not match the "
+    "selected firmware source path."
 )
 
 print(
-    "[PASS] Firmware staged in C:\\tmp"
+    "[PASS] Selected firmware path passed directly to Maple Loader"
 )
 
 

@@ -124,15 +124,6 @@ class UploadService:
         r"\maple_upload.bat"
     )
     # =====================================================
-    # Temporary Firmware Directory
-    # =====================================================
-
-    # This follows the proven manual workflow.
-    TEMP_FIRMWARE_DIR = Path(
-        r"C:\tmp"
-    )
-
-    # =====================================================
     # Upload Timeout
     # =====================================================
 
@@ -434,9 +425,19 @@ class UploadService:
         firmware: Firmware,
     ) -> Path:
         """
-        Copy selected firmware into C:\\tmp.
+        Resolve and validate the selected firmware file.
 
-        This follows the proven manual Maple workflow.
+        The production firmware source is the project firmware
+        repository managed by FirmwareService:
+
+            resources/firmware/<package>/<firmware>.bin
+
+        The previous C:\\tmp staging directory was only used for
+        the manual CMD workflow and is not part of the application
+        runtime architecture.
+
+        No copy is created here. The original repository firmware
+        path is passed to Maple Loader.
         """
 
         if firmware is None:
@@ -455,10 +456,6 @@ class UploadService:
             firmware.path
         ).resolve()
 
-        # -------------------------------------------------
-        # Validate source
-        # -------------------------------------------------
-
         if not source.exists():
 
             raise FileNotFoundError(
@@ -473,34 +470,7 @@ class UploadService:
                 f"{source}"
             )
 
-        # -------------------------------------------------
-        # Create temporary directory
-        # -------------------------------------------------
-
-        self.TEMP_FIRMWARE_DIR.mkdir(
-            parents=True,
-            exist_ok=True,
-        )
-
-        # -------------------------------------------------
-        # Destination
-        # -------------------------------------------------
-
-        destination = (
-            self.TEMP_FIRMWARE_DIR
-            / source.name
-        )
-
-        # -------------------------------------------------
-        # Copy
-        # -------------------------------------------------
-
-        shutil.copy2(
-            source,
-            destination,
-        )
-
-        return destination
+        return source
 
     # =====================================================
     # Build Command
@@ -514,9 +484,13 @@ class UploadService:
         """
         Build the Maple Loader command.
 
-        Proven manual command:
+        Proven Maple command:
 
-            maple_upload COM3 2 1EAF:003 C:\\tmp\\firmware.bin
+            maple_upload COM3 2 1EAF:003 <firmware>
+
+        The firmware argument is the selected binary from the
+        project firmware repository. C:\\tmp was only the staging
+        location used during earlier manual CMD testing.
 
         Application representation:
 
@@ -528,7 +502,7 @@ class UploadService:
             [5] COM3
             [6] 2
             [7] 1EAF:003
-            [8] C:\\tmp\\firmware.bin
+            [8] resources/firmware/<package>/<firmware>.bin
 
         COM port is obtained from the freshly detected
         Device object.
@@ -567,7 +541,7 @@ class UploadService:
             )
 
         # -------------------------------------------------
-        # Prepare firmware
+        # Resolve selected firmware from the repository
         # -------------------------------------------------
 
         upload_firmware = (
