@@ -156,6 +156,10 @@ class FakeUploadService:
     def upload(
         self,
         firmware,
+        *,
+        on_output=None,
+        on_error=None,
+        **kwargs,
     ):
         """
         Simulate UploadService.upload().

@@ -1,3 +1,37 @@
+# Changelog
+
+## Step 4.5 — Live Update Progress UI
+
+- Added a dedicated firmware update progress panel to the DashboardWidget.
+- Added circular and horizontal progress indicators using the approved UB3 light-theme palette.
+- Progress is phase-based and explicitly does not claim byte-level transfer accuracy.
+- Added live phase mapping for preparation, Maple Loader startup, uploading, transfer completion and final success.
+- Added a completion state that reaches 100% only when the UploadResult reports success.
+- Added warning-aware completion styling.
+- Added automatic scrolling of the live upload log.
+- Added `tests/test_gui_update_progress.py`.
+- No physical UB3 programming is performed by the Step 4.5 test.
+
+## Step 4.4 — UploadWorker Progress and Live Output
+
+- UploadWorker forwards live uploader stdout/stderr to the application.
+- UpdateController wires worker progress/output callbacks into the GUI event bridge.
+- Dashboard consumes textual workflow progress without fabricating byte-level percentages.
+- Added `tests/test_upload_worker_streaming.py`.
+- No physical UB3 programming is performed by the new test.
+
+9 - Step 4.3 - Confirmation Final Validation Gate
+
+- Integrated the Step 4.2 confirmation dialog into the Home page Update workflow.
+- Update now performs pre-update validation before showing confirmation.
+- Confirmation is followed by a mandatory second fresh device validation.
+- Prevents programming if the UB3 is disconnected or replaced while the dialog is open.
+- Prevents programming if the selected firmware changes after the first validation.
+- Only starts `UploadWorker` after the final validation succeeds.
+- Added `tests/test_confirmation_update_workflow.py`.
+- Updated README with the complete safe-update workflow and current milestone status.
+
+
 ## 2026-08-09 - Step 4 Baseline - Home Page Action Controls
 
 - Promoted the Home page device refresh control as a HomePage-level reference while keeping ownership in the Connection Status card.
@@ -203,3 +237,9 @@ The current Maple Loader workflow starts from Maple Serial mode and performs the
 - Improved button contrast and explicit action colours.
 - Improved firmware selector to show package name and version.
 - Added GUI UX regression coverage.
+
+### Step 4.5 Fix — Failure Progress Visibility
+
+- Keep the update progress card visible after failed/cancelled updates so operators retain immediate diagnostic context.
+- Apply error/warning styling to the progress card and progress bar.
+- Preserve the last meaningful workflow percentage instead of showing a false 100% on failure.

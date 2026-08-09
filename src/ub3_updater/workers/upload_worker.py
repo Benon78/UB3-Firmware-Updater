@@ -598,7 +598,9 @@ class UploadWorker:
 
             result = (
                 self.upload_service.upload(
-                    self._firmware
+                    self._firmware,
+                    on_output=self._emit_output,
+                    on_error=self._emit_error_output,
                 )
             )
 
@@ -702,6 +704,28 @@ class UploadWorker:
             self._emit_error(
                 exc
             )
+
+    def _emit_output(self, message: str) -> None:
+        """Forward live uploader stdout to the registered callback."""
+
+        if not message:
+            return
+
+        callback = self._on_output
+
+        if callback is not None:
+            callback(str(message))
+
+    def _emit_error_output(self, message: str) -> None:
+        """Forward live uploader stderr to the output stream."""
+
+        if not message:
+            return
+
+        callback = self._on_output
+
+        if callback is not None:
+            callback(f"[ERROR] {message}")
 
     # =====================================================
     # Cancel

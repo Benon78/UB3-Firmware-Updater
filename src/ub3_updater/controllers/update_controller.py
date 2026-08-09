@@ -266,6 +266,7 @@ class UpdateController:
 
             configure(
                 on_state_changed=self._handle_worker_state,
+                on_output=self._handle_worker_output,
                 on_progress=self._handle_worker_progress,
                 on_completed=self._handle_worker_completed,
                 on_error=self._handle_worker_error,
@@ -932,6 +933,150 @@ class UpdateController:
             device=current_device,
             firmware=firmware,
             checks=checks,
+        )
+
+    # =====================================================
+    # Confirmed Update
+    # =====================================================
+
+    def confirm_update(
+        self,
+        validation_result: PreUpdateValidationResult,
+    ) -> bool:
+        """
+        Start an update only after a successful confirmation dialog.
+
+        The validation result represents the device/firmware that the
+        operator reviewed. A second fresh validation is mandatory after
+        confirmation so that a device replacement while the dialog was
+        open cannot result in programming the wrong UB3.
+
+        Parameters
+        ----------
+        validation_result:
+            Successful pre-update validation result shown to the operator.
+
+        Returns
+        -------
+        bool
+            True only when the UploadWorker accepted the update.
+        """
+
+        if self.is_uploading:
+            self._emit_error(
+                "A firmware update is already running."
+            )
+            return False
+
+        if not isinstance(
+            validation_result,
+            PreUpdateValidationResult,
+        ):
+            self._emit_error(
+                "Invalid pre-update validation result."
+            )
+            return False
+
+        if not validation_result.valid:
+            self._emit_error(
+                "The pre-update validation did not pass."
+            )
+            return False
+
+        if validation_result.device is None:
+            self._emit_error(
+                "The validated UB3 device is unavailable."
+            )
+            return False
+
+        if validation_result.firmware is None:
+            self._emit_error(
+                "The validated firmware is unavailable."
+            )
+            return False
+
+        # -------------------------------------------------
+        # Protect against firmware changes while the
+        # confirmation dialog was open.
+        # -------------------------------------------------
+
+        if not self._same_firmware(
+            validation_result.firmware,
+            self.selected_firmware,
+        ):
+            self._emit_error(
+                "The selected firmware changed after validation. "
+                "Run the update checks again."
+            )
+            return False
+
+        # -------------------------------------------------
+        # SECOND / FINAL VALIDATION
+        #
+        # This is deliberately performed after the operator
+        # confirms the dialog.
+        # -------------------------------------------------
+
+        final_validation = (
+            self.validate_before_update(
+                expected_device=validation_result.device,
+            )
+        )
+
+        if not final_validation.valid:
+            self._emit_error(
+                final_validation.message
+            )
+            return False
+
+        # -------------------------------------------------
+        # Ensure the firmware returned by the final scan is
+        # still the firmware the operator confirmed.
+        # -------------------------------------------------
+
+        if not self._same_firmware(
+            validation_result.firmware,
+            final_validation.firmware,
+        ):
+            self._emit_error(
+                "The selected firmware changed during confirmation. "
+                "Run the update checks again."
+            )
+            return False
+
+        # -------------------------------------------------
+        # The device and firmware have now passed BOTH
+        # validation stages. Start the existing update path.
+        # -------------------------------------------------
+
+        return self.update()
+
+    @staticmethod
+    def _same_firmware(
+        first: Firmware | None,
+        second: Firmware | None,
+    ) -> bool:
+        """
+        Compare firmware identity without relying on object identity.
+
+        Name, version and resolved file path form the application-level
+        identity used for the confirmation safety boundary.
+        """
+
+        if first is None or second is None:
+            return False
+
+        try:
+            first_path = first.file_path.resolve()
+            second_path = second.file_path.resolve()
+        except Exception:
+            first_path = first.path
+            second_path = second.path
+
+        return (
+            first.name == second.name
+            and first.version == second.version
+            and first_path == second_path
         )
 
     # =====================================================

@@ -24,6 +24,8 @@ from ub3_updater.controllers.update_controller import (
 from ub3_updater.models.device import Device
 from ub3_updater.models.firmware import Firmware
 from ub3_updater.models.upload_result import UploadResult
+from ub3_updater.models.pre_update_validation import PreUpdateValidationResult
+from ub3_updater.ui.dialogs.update_confirmation_dialog import UpdateConfirmationDialog
 from ub3_updater.themes.light_theme import (
     TEXT,
     TEXT_SECONDARY,
@@ -314,6 +316,14 @@ class HomePage(BasePage):
             message
         )
 
+        # During an active upload, controller status messages are
+        # translated into the operator-facing workflow progress
+        # indicator. The dashboard owns the presentation mapping.
+        if self.controller.is_uploading:
+            self.dashboard_widget.update_progress(
+                message
+            )
+
     # ==================================================
     # Upload
     # ==================================================
@@ -325,6 +335,14 @@ class HomePage(BasePage):
         self.dashboard_widget.append_output(
             output
         )
+
+        # Maple Loader output is also useful as a live phase signal.
+        # This does not fabricate byte-level progress; the dashboard
+        # only maps recognized workflow phases.
+        if self.controller.is_uploading:
+            self.dashboard_widget.update_progress(
+                output
+            )
 
     def show_result(
         self,
@@ -360,10 +378,85 @@ class HomePage(BasePage):
         self._refresh_button_state()
 
     def _update_requested(self):
+        """
+        Run the complete operator confirmation boundary.
+
+        Stage 1:
+            Fresh pre-update validation.
+
+        Stage 2:
+            Operator reviews the validated device/firmware.
+
+        Stage 3:
+            After confirmation, the controller performs a second
+            fresh validation and only then starts UploadWorker.
+        """
+
         self.dashboard_widget.clear_output()
 
-        started = (
-            self.controller.update()
+        validate = getattr(
+            self.controller,
+            "validate_before_update",
+            None,
+        )
+
+        confirm_update = getattr(
+            self.controller,
+            "confirm_update",
+            None,
+        )
+
+        # --------------------------------------------------
+        # Compatibility guard for lightweight GUI test
+        # controllers. The real UpdateController always provides
+        # these methods.
+        # --------------------------------------------------
+
+        if not callable(validate) or not callable(confirm_update):
+            self.dashboard_widget.message_label.setText(
+                "Update safety validation is unavailable."
+            )
+            self._refresh_button_state()
+            return
+
+        # --------------------------------------------------
+        # First validation: capture the device/firmware that
+        # will be shown in the confirmation dialog.
+        # --------------------------------------------------
+
+        validation = validate(
+            expected_device=self.controller.device,
+        )
+
+        if not validation.valid:
+            self.dashboard_widget.message_label.setText(
+                validation.message
+            )
+            self._refresh_button_state()
+            return
+
+        # --------------------------------------------------
+        # Operator confirmation.
+        # --------------------------------------------------
+
+        dialog = UpdateConfirmationDialog(
+            validation,
+            parent=self.window(),
+        )
+
+        if dialog.exec() != dialog.Accepted:
+            self.dashboard_widget.message_label.setText(
+                "Firmware update cancelled."
+            )
+            self._refresh_button_state()
+            return
+
+        # --------------------------------------------------
+        # Second validation + UploadWorker start.
+        # --------------------------------------------------
+
+        started = confirm_update(
+            validation
         )
 
         if not started:
