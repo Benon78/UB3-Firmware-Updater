@@ -1,18 +1,16 @@
 {
     "application": {
         "name": "UB3 Device Manager",
-        "version": "0.2.0",
+        "version": "0.5.5",
         "company": "Benon Tech & Art",
         "developer": "Benjamin William"
     },
-
     "paths": {
         "firmware": "resources/firmware",
         "tools": "resources/tools",
         "drivers": "resources/drivers",
         "logs": "logs"
     },
-
     "upload": {
         "vendor_id": "1EAF",
         "product_id_runtime": "0004",

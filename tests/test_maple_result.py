@@ -143,6 +143,10 @@ assert (
     "Expected SUCCESS, "
     f"got {status}"
 )
+assert warning == "", (
+    "Normal Maple runtime reset message must not "
+    f"produce a warning; got: {warning}"
+)
 
 
 # =========================================================

@@ -28,7 +28,7 @@ The COM port is detected automatically by DeviceService.
 The user does not manually select COM3/COM7.
 
 Version:
-0.5.5
+0.5.7
 =========================================================
 """
 
@@ -133,6 +133,14 @@ class UploadService:
 
     DEFAULT_TIMEOUT = 120
 
+    # Post-upload USB re-enumeration verification.
+    #
+    # This does NOT alter the Maple upload command. It only verifies
+    # that the UB3 returns to normal Maple Serial operation after
+    # maple_upload.bat/maple_loader.jar completes.
+    POST_UPLOAD_REENUMERATION_TIMEOUT = 20.0
+    POST_UPLOAD_REENUMERATION_INTERVAL = 0.25
+
     # =====================================================
     # Maple Success Markers
     # =====================================================
@@ -152,6 +160,7 @@ class UploadService:
         "Starting download failed",
         "Download failed",
         "No DFU device found",
+        "Couldn't find the DFU device",
         "Could not find DFU device",
         "Could not open USB device",
         "Unable to open USB device",
@@ -418,6 +427,7 @@ class UploadService:
             firmware=firmware,
             device=device,
             started_at=started_at,
+            on_output=on_output,
         )
 
     # =====================================================
@@ -790,6 +800,7 @@ class UploadService:
         firmware: Firmware,
         device: Device,
         started_at: datetime,
+        on_output: Callable[[str], None] | None = None,
     ) -> UploadResult:
         """
         Convert ProcessResult into UploadResult.
@@ -865,8 +876,76 @@ class UploadService:
         )
 
         # =================================================
-        # Successful upload
+        # Post-upload runtime verification
         # =================================================
+        #
+        # Maple Loader remains responsible for the actual
+        # DTR -> DFU -> download -> reset sequence.
+        #
+        # We only verify:
+        #
+        #     DFU -> USB reconnect -> Maple Serial
+        #
+        # No alternative uploader or DFU implementation is used.
+
+        transfer_completed = (
+            self._maple_transfer_completed(
+                process_result
+            )
+        )
+
+        if transfer_completed:
+
+            runtime_device = (
+                self._wait_for_maple_serial(
+                    timeout=(
+                        self.POST_UPLOAD_REENUMERATION_TIMEOUT
+                    ),
+                    interval=(
+                        self.POST_UPLOAD_REENUMERATION_INTERVAL
+                    ),
+                    on_output=on_output,
+                )
+            )
+
+            if runtime_device is not None:
+
+                common["com_port"] = (
+                    runtime_device.com_port
+                )
+
+                common["device_state"] = (
+                    self._state_value(
+                        runtime_device
+                    )
+                )
+
+                return UploadResult.success_result(
+                    message=(
+                        "Firmware upload completed successfully. "
+                        "UB3 returned to Maple Serial mode "
+                        f"on {runtime_device.com_port}."
+                    ),
+                    **common,
+                )
+
+            return UploadResult.success_with_warning_result(
+                message=(
+                    "Firmware transfer completed successfully, "
+                    "but the UB3 did not return to Maple Serial "
+                    "mode within "
+                    f"{self.POST_UPLOAD_REENUMERATION_TIMEOUT:.0f} "
+                    "seconds."
+                ),
+                warning=(
+                    "The Maple upload command was executed without "
+                    "changing its parameters. The firmware download "
+                    "completed, but Windows did not detect the UB3 "
+                    "again in normal Maple Serial mode. Check the "
+                    "USB connection/device state before continuing."
+                ),
+                **common,
+            )
 
         if status == UploadStatus.SUCCESS:
 
@@ -874,10 +953,6 @@ class UploadService:
                 message=message,
                 **common,
             )
-
-        # =================================================
-        # Successful upload with warning
-        # =================================================
 
         if (
             status
@@ -890,15 +965,141 @@ class UploadService:
                 **common,
             )
 
-        # =================================================
-        # Failure
-        # =================================================
-
         return UploadResult.failed_result(
             message,
             **common,
         )
 
+
+    # =====================================================
+    # Maple Transfer Detection
+    # =====================================================
+
+    @staticmethod
+    def _maple_transfer_completed(
+        process_result: ProcessResult,
+    ) -> bool:
+        """
+        Return True when Maple Loader reached the firmware
+        download completion point.
+        """
+
+        output = (
+            (process_result.stdout or "")
+            + "\n"
+            + (process_result.stderr or "")
+        ).lower()
+
+        return (
+            "starting download:" in output
+            and "finished!" in output
+        )
+
+    # =====================================================
+    # Post-upload Maple Serial Verification
+    # =====================================================
+
+    def _wait_for_maple_serial(
+        self,
+        *,
+        timeout: float,
+        interval: float,
+        on_output: Callable[[str], None] | None = None,
+    ) -> Device | None:
+        """
+        Wait for the UB3 to re-enumerate in normal Maple Serial
+        mode after Maple Loader completes.
+
+        This performs fresh DeviceService scans only. It does not
+        manipulate USB, send DFU commands, reset the board, or
+        change the Maple upload command.
+        """
+
+        import time
+
+        deadline = (
+            time.monotonic()
+            + max(0.0, timeout)
+        )
+
+        last_state = None
+
+        if on_output is not None:
+            try:
+                on_output(
+                    "Verifying UB3 USB re-enumeration..."
+                )
+            except Exception:
+                pass
+
+        while time.monotonic() <= deadline:
+
+            device = self.device_service.scan()
+
+            if (
+                device is not None
+                and device.connected
+                and device.state
+                == DeviceState.MAPLE_SERIAL
+                and device.com_port
+            ):
+                if on_output is not None:
+                    try:
+                        on_output(
+                            "UB3 returned to Maple Serial "
+                            f"mode on {device.com_port}."
+                        )
+                    except Exception:
+                        pass
+
+                return device
+
+            current_state = (
+                self._state_value(device)
+                if device is not None
+                else ""
+            )
+
+            if (
+                current_state
+                and current_state != last_state
+                and on_output is not None
+            ):
+                try:
+                    on_output(
+                        "Waiting for UB3 runtime USB "
+                        f"re-enumeration: {current_state}"
+                    )
+                except Exception:
+                    pass
+
+            last_state = current_state
+
+            remaining = (
+                deadline
+                - time.monotonic()
+            )
+
+            if remaining <= 0:
+                break
+
+            time.sleep(
+                min(
+                    max(0.01, interval),
+                    remaining,
+                )
+            )
+
+        if on_output is not None:
+            try:
+                on_output(
+                    "UB3 did not return to Maple Serial "
+                    "mode within the post-upload timeout."
+                )
+            except Exception:
+                pass
+
+        return None
 
     # =====================================================
     # Maple Result Evaluation
@@ -976,6 +1177,14 @@ class UploadService:
         # 2. Detect successful firmware transfer
         # =================================================
 
+        # Maple Loader's actual transfer-completion line is:
+        #
+        #     Starting download: [...] finished!
+        #
+        # "Done!" normally follows it, but the Java/USB reset path
+        # can terminate before that final informational line is
+        # flushed. The transfer itself is already complete when
+        # the download line reaches "finished!".
         download_finished = (
             "starting download:"
             in output_lower
@@ -992,6 +1201,11 @@ class UploadService:
         # 3. Detect post-upload reset warning
         # =================================================
 
+        # "Resetting USB to switch back to runtime mode" is a
+        # normal Maple Loader completion message. It must NOT be
+        # interpreted as a warning by itself.
+        #
+        # Only an actual reset error is a warning.
         reset_warning = (
             "error resetting after download"
             in output_lower
@@ -1001,19 +1215,31 @@ class UploadService:
             or
             "could not reset device"
             in output_lower
+            or
+            "reset via usb serial failed"
+            in output_lower
+            or
+            "failed to reset"
+            in output_lower
         )
 
         # =================================================
         # 4. Successful transfer
         # =================================================
 
-        if download_finished and done_found:
+        if download_finished:
 
             # -------------------------------------------------
             # Successful transfer + reset warning
+            #
+            # A missing "Done!" line is not treated as a failed
+            # firmware write when the download itself reached
+            # "finished!". This is important because Maple Loader
+            # can enter its USB reset/re-enumeration path before
+            # flushing the final "Done!" text.
             # -------------------------------------------------
 
-            if reset_warning:
+            if reset_warning or not done_found:
 
                 return (
                     UploadStatus.SUCCESS_WITH_WARNING,
@@ -1024,8 +1250,8 @@ class UploadService:
 
                     (
                         "Firmware programming completed, "
-                        "but Maple Loader reported a USB "
-                        "reset warning after the download. "
+                        "but Maple Loader did not complete "
+                        "the automatic USB runtime reset. "
                         "The UB3 may require reconnection."
                     ),
                 )

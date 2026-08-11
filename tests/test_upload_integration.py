@@ -537,14 +537,16 @@ print("=" * 70)
 # =========================================================
 
 assert (
-    device_service.scan_count == 1
+    device_service.scan_count >= 2
 ), (
-    "UploadService did not perform exactly "
-    "one fresh DeviceService.scan()."
+    "UploadService did not perform both the initial "
+    "device scan and the post-upload Maple Serial "
+    "re-enumeration scan."
 )
 
 print(
-    "[PASS] Fresh device scan performed"
+    "[PASS] Fresh pre-upload scan and post-upload "
+    "re-enumeration scan performed"
 )
 
 
@@ -793,14 +795,15 @@ print(
 
 assert (
     result.status
-    == UploadStatus.SUCCESS_WITH_WARNING
+    == UploadStatus.SUCCESS
 ), (
-    "Expected SUCCESS_WITH_WARNING, "
-    f"got {result.status}"
+    "Expected SUCCESS after confirmed Maple Serial "
+    f"re-enumeration, got {result.status}"
 )
 
 print(
-    "[PASS] Maple result interpreted correctly"
+    "[PASS] Maple result and post-upload re-enumeration "
+    "interpreted correctly"
 )
 
 
@@ -833,19 +836,14 @@ print(
 
 assert (
     result.has_warning
-    is True
+    is False
 ), (
-    "Expected a post-upload warning."
-)
-
-assert (
-    result.warning
-), (
-    "Warning text was not captured."
+    "No warning should remain when the UB3 returns "
+    "to Maple Serial mode."
 )
 
 print(
-    "[PASS] Post-upload reset warning captured"
+    "[PASS] Post-upload Maple Serial recovery confirmed"
 )
 
 

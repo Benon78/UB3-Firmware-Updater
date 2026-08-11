@@ -388,3 +388,22 @@ and that its repository metadata references the correct binary file.
 - Do not disconnect the UB3 during programming unless intentionally performing a controlled recovery test.
 - Use the bundled Maple runtime for normal application operation.
 - Keep firmware packages and their metadata together in the firmware repository.
+
+## Controlled Physical Validation
+
+Before programming a real UB3, run the Step 5.4 pre-flight in safe mode:
+
+```powershell
+python tools/physical_validation.py
+```
+
+Safe mode detects the connected UB3, verifies Maple Serial mode, resolves the selected firmware from `resources/firmware`, verifies the bundled Maple uploader, and prints the exact Maple command. It does not program the device.
+
+For an intentional physical update, use the explicit programming guard:
+
+```powershell
+python tools/physical_validation.py --program --confirm PROGRAM-UB3
+```
+
+The tool requires the confirmation token twice before the upload starts. Keep the UB3 connected and powered throughout the programming operation. Afterward, the tool performs a post-upload USB scan and reports whether the UB3 re-enumerated.
+

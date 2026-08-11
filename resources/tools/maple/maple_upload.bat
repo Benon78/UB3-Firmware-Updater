@@ -1,19 +1,54 @@
 @echo off
-rem: Note %~dp0 get path of this batch file
-rem: Need to change drive if My Documents is on a drive other than C:
-set driverLetter=%~dp0
-set driverLetter=%driverLetter:~0,2%
-%driverLetter%
-cd %~dp0
-set PATH=%5\java\bin;%PATH%
-java -jar maple_loader.jar %1 %2 %3 %4
+setlocal
 
-for /l %%x in (1, 1, 40) do (
-  ping -w 50 -n 1 192.0.2.1 > nul
-  mode %1 > nul
-  if ERRORLEVEL 0 goto comPortFound
+rem ================================================================
+rem UB3 Firmware Updater - Bundled Maple Loader Runtime
+rem
+rem The upload command contract is intentionally unchanged:
+rem
+rem     maple_upload <COM> <ALT-ID> <DFU-ID> <firmware.bin>
+rem
+rem Java is PRIVATE to this process and is always taken from the
+rem bundled runtime. No JAVA_HOME or system Java is required.
+rem ================================================================
+
+set "MAPLE_DIR=%~dp0"
+set "MAPLE_JAVA=%MAPLE_DIR%java\bin\java.exe"
+
+if not exist "%MAPLE_JAVA%" (
+    echo ERROR: Bundled Java runtime not found.
+    echo Expected: %MAPLE_JAVA%
+    exit /b 2
 )
 
-echo timeout waiting for %1 serial
+if not exist "%MAPLE_DIR%dfu-util.exe" (
+    echo ERROR: Bundled dfu-util.exe not found.
+    exit /b 3
+)
 
-:comPortFound
+if not exist "%MAPLE_DIR%libusb0.dll" (
+    echo ERROR: Bundled libusb0.dll not found.
+    exit /b 4
+)
+
+if not exist "%MAPLE_DIR%maple_loader.jar" (
+    echo ERROR: maple_loader.jar not found.
+    exit /b 5
+)
+
+if not exist "%MAPLE_DIR%lib\jssc.jar" (
+    echo ERROR: lib\jssc.jar not found.
+    exit /b 6
+)
+
+rem Process-local PATH only. This does NOT modify Windows PATH.
+set "PATH=%MAPLE_DIR%;%MAPLE_DIR%java\bin;%PATH%"
+
+cd /d "%MAPLE_DIR%"
+
+rem IMPORTANT:
+rem Keep the Maple Loader arguments unchanged.
+"%MAPLE_JAVA%" -jar "%MAPLE_DIR%maple_loader.jar" %1 %2 %3 %4
+set "MAPLE_LOADER_EXIT=%ERRORLEVEL%"
+
+exit /b %MAPLE_LOADER_EXIT%

@@ -226,7 +226,7 @@ class MainWindow(QMainWindow):
         )
 
         self.version_label = QLabel(
-            "v0.2.0"
+            "v0.5.5"
         )
         self.version_label.setStyleSheet(
             f"color: {TEXT_SECONDARY}; border: none;"

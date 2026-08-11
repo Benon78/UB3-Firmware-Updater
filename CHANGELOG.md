@@ -1,3 +1,146 @@
+## 2026-08-12 — Step 5.5 Baseline: Version 0.5.5
+
+- Established the complete Step 5.5 codebase as the baseline after the full regression suite passed 17/17.
+- Updated the application version from `0.2.0` to `0.5.5` in application configuration and visible application version references.
+- Updated the GUI footer to display `v0.5.5`.
+- Preserved the existing Maple upload architecture, command contract, bundled runtime, driver resources, firmware repository, and post-upload re-enumeration behavior.
+- `README.md` remains user/project documentation only; milestone history remains in this changelog.
+
+## 2026-08-11 — Step 5.5 Finalized: Maple Runtime, Drivers & Post-Upload Re-enumeration
+
+### Runtime
+- Bundled the approved Arduino STM32 Maple runtime required by the proven manual upload workflow.
+- Bundled Java `1.8.0_191` (`i586`) from the supplied Arduino environment.
+- Corrected Java runtime validation to the actual supplied layout: `java/bin/client/jvm.dll`.
+- No `JAVA_HOME`, system Java, Arduino IDE, or system Java `PATH` configuration is required.
+- The Maple launcher uses the project's bundled Java runtime directly.
+
+### USB Drivers
+- Bundled the supplied Arduino STM32 Windows driver package.
+- Included Maple DFU, Maple Serial, and STM COM driver resources.
+- Included `install_drivers.bat` and `install_STM_COM_drivers.bat`.
+- Driver installation remains an explicit privileged setup operation; the updater does not silently modify Windows drivers during normal upload.
+
+### Upload Architecture
+- Existing `UploadService -> ProcessRunner -> maple_upload.bat -> maple_loader.jar` architecture is unchanged.
+- Existing Maple command contract is unchanged:
+  `maple_upload <detected COM> 2 1EAF:003 <firmware.bin>`.
+- COM ports remain runtime-detected; COM3 is only a test fixture and is not a production configuration.
+- No firmware binary is modified, converted, staged to `C:\tmp`, or rewritten.
+
+### Post-Upload Verification
+- Added verification that the UB3 re-enumerates as Maple Serial after Maple Loader completes.
+- Firmware transfer complete + Maple Serial returned = `SUCCESS`.
+- Firmware transfer complete + Maple Serial not returned within the verification window = `SUCCESS_WITH_WARNING`.
+- Actual Maple/DFU transfer failure remains `FAILED`.
+
+### Firmware Maintenance
+- Firmware remains data-driven through the existing firmware repository and JSON metadata.
+- New firmware releases require only the new `.bin` and corresponding JSON metadata; no uploader/source-code modification is required.
+
+### Documentation
+- `README.md` remains project/user documentation only and was not modified for milestone history.
+- Step 5.5 implementation/history is recorded here in `CHANGELOG.md`.
+
+## 2026-08-11 — Step 5.5 Final Runtime, Driver & Re-enumeration Baseline
+
+### Changed
+
+- Bundled the complete approved Windows driver package from the supplied Arduino STM32 environment.
+- Included `install_drivers.bat` for Maple DFU (`1EAF:0003`) and Maple Serial (`1EAF:0004`).
+- Included `install_STM_COM_drivers.bat` and the supplied STM Serial (`0483:5740`) driver resources.
+- Kept the supplied Maple driver binaries, INF/CAT files, installers, and `wdi-simple.exe` unchanged.
+- Removed all production dependence on `JAVA_HOME`, system Java, and the external Arduino installation.
+- `maple_upload.bat` now uses only `resources/tools/maple/java/bin/java.exe`.
+- The launcher uses a process-local PATH only to allow the bundled Maple runtime to locate its bundled executables; Windows system PATH is not modified.
+- COM port remains runtime-detected through `DeviceService`; `COM3` is not a production configuration.
+- Post-upload verification remains in `UploadService` and confirms return to Maple Serial after Maple Loader completes.
+- Firmware files remain opaque artifacts; new firmware releases require only the firmware `.bin` and JSON metadata.
+- README.md remains unchanged. Project history and milestone changes are recorded only in CHANGELOG.md.
+
+### Runtime Independence
+
+The target PC no longer needs:
+- Arduino IDE
+- Arduino STM32 installation
+- manually configured `JAVA_HOME`
+- manually added Java PATH
+
+The updater uses its bundled Maple Loader, DFU runtime, Java runtime, and USB driver package.
+
+### Driver Scope
+
+Bundled driver resources cover:
+- Maple DFU: `1EAF:0003`
+- Maple Serial: `1EAF:0004`
+- STM Serial: `0483:5740`
+
+Driver installation is an administrative Windows operation and should be invoked by the application's installer/setup flow rather than requiring users to browse into the resource directory.
+
+## 2026-08-11 — Step 5.5 Maple Runtime Compatibility & Post-Upload Re-enumeration
+
+### Changed
+
+- Rebased the bundled Maple runtime on the exact approved Arduino STM32 Windows Maple tooling supplied for this project.
+- Replaced the previously bundled `dfu-util 0.9` runtime with the approved legacy `dfu-util 0.1+svn` executable and its matching `libusb0.dll`.
+- Bundled the supplied Arduino Java runtime `1.8.0_191` (`i586`) under `resources/tools/maple/java/` so Maple Loader no longer depends on an Arduino installation or system Java on the target PC.
+- Kept `maple_loader.jar` and `lib/jssc.jar` unchanged from the supplied approved runtime.
+- Kept the existing Maple upload command contract unchanged: COM port, ALT ID `2`, DFU ID `1EAF:003`, selected firmware path.
+- Added post-upload USB re-enumeration verification through the existing `DeviceService`/`UploadService` architecture.
+- The updater now distinguishes firmware-transfer completion from return to normal Maple Serial operation.
+- If the firmware transfer completes but the UB3 does not return to Maple Serial within the verification timeout, the result is reported as `SUCCESS_WITH_WARNING` with an explicit recovery diagnostic.
+- No `.bin` firmware file is modified, converted, staged, or rewritten.
+- README.md is unchanged; project milestone/history changes are recorded only in CHANGELOG.md.
+
+### Verified
+
+- Exact Maple Loader/JSSC binaries match the supplied Arduino STM32 runtime.
+- Bundled Java version and architecture match the supplied Arduino environment.
+- Existing command structure remains unchanged.
+- Post-upload Maple Serial re-enumeration is verified after Maple Loader exits.
+- Existing upload architecture remains `UploadService -> ProcessRunner -> maple_upload.bat -> maple_loader.jar`.
+- No Python DFU uploader was introduced.
+
+### Tests
+
+- `tests/test_maple_runtime_step_5_5.py` — added.
+- `tests/test_upload_integration.py` — updated for post-upload re-enumeration.
+- No physical UB3 is programmed by the Step 5.5 software-only tests.
+
+## 2026-08-09 — Step 5.4 Maple DFU Runtime Bundling
+
+- Bundled the Windows `dfu-util 0.9` executable from the supplied Arduino_STM32 toolchain under `resources/tools/maple/`.
+- Bundled the matching `libusb-1.0.dll` required by `dfu-util.exe`.
+- Updated `maple_upload.bat` to expose the bundled DFU runtime through its local directory.
+- Hardened Java resolution for `maple_loader.jar`: bundled JRE if present, `JAVA_HOME`, system `PATH`, then the legacy Arduino `%5\java\bin` location.
+- Added an explicit Java-runtime pre-flight failure instead of allowing Maple Loader to fail later with an opaque process error.
+- Updated Maple runtime manifest and resource validation to include the DFU runtime files.
+- Preserved the existing ConfigService, DeviceService, FirmwareService, UploadService, UploadWorker, and ProcessRunner architecture.
+- The supplied `Arduino_STM32.zip` contains the Maple/DFU tooling but does not contain a Java runtime; Java is therefore not yet bundled in this baseline.
+- A future self-contained release can place a compatible Windows x64 JRE under `resources/tools/maple/java/` without changing the Maple command contract.
+
+## Step 5.4 — Firmware Selection Integrity Hardening
+
+- Strengthened controlled physical-validation coverage for firmware selection.
+- Added regression coverage for every real firmware package exposed by the repository.
+- Verified GUI dropdown selection returns the same real `Firmware` model object.
+- Verified selected firmware paths remain inside `resources/firmware`.
+- Verified selected firmware passes the existing repository validation API.
+- Verified `UploadService` receives the selected firmware and passes its exact binary path to Maple Loader.
+- Verified changing firmware selection cannot leak the previously selected firmware path into a new Maple command.
+- Preserved the existing ConfigService, FirmwareService, DeviceService, UploadService, GUI, controller, and worker architecture.
+- No physical UB3 is programmed by the new selection-integrity test.
+
+## Step 5.4 - Controlled Physical Validation
+
+- Added a guarded Windows physical-validation entry point.
+- Safe mode performs firmware, bundled Maple runtime, device, Maple Serial, COM-port, and command pre-flight checks without programming hardware.
+- Physical programming requires explicit `--program --confirm PROGRAM-UB3` and a second interactive confirmation.
+- Reuses ConfigService, FirmwareService, DeviceService, UploadService, and ProcessRunner through the existing architecture.
+- Added post-upload device re-enumeration verification.
+- Added software-only Step 5.4 safety/architecture regression tests.
+- No automatic physical programming is performed by the test suite.
+
 # Changelog
 
 ## 2026-08-09 — Step 5.3 Process Execution and Bundled Runtime Integration

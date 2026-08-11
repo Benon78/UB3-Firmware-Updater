@@ -45,8 +45,17 @@ manifest = (root / "tool_manifest.json").read_text(
 
 assert '"entrypoint": "maple_upload.bat"' in manifest
 assert '"loader": "maple_loader.jar"' in manifest
+assert '"dfu-util.exe"' in manifest
+assert '"libusb0.dll"' in manifest
+assert '"java_required": true' in manifest
+print("[PASS] DFU and Java runtime requirements are declared")
 
 print("[PASS] Tool manifest is valid")
+java = service.resolve_java()
+if java is not None:
+    print(f"[PASS] Java runtime available: {java}")
+else:
+    print("[INFO] Java runtime not installed/bundled; physical Maple execution requires Java 7+")
 print("[PASS] Maple Loader execution was not attempted")
 print("[PASS] No physical UB3 was programmed")
 

@@ -7,7 +7,54 @@
     "required_files": [
         "maple_upload.bat",
         "maple_loader.jar",
-        "lib/jssc.jar"
+        "lib/jssc.jar",
+        "dfu-util.exe",
+        "libusb0.dll",
+        "java/bin/java.exe",
+        "java/bin/client/jvm.dll",
+        "java/lib/rt.jar",
+        "java/release",
+        "tool_manifest.json"
     ],
-    "source": "Arduino_STM32.zip"
+    "source": "Arduino_STM32.zip supplied approved Arduino environment",
+    "java_bundled": true,
+    "java_version": "1.8.0_191",
+    "java_architecture": "i586",
+    "java_resolution_order": [
+        "resources/tools/maple/java/bin/java.exe"
+    ],
+    "dfu_util_version": "0.1+svn",
+    "dfu_util_source": "Arduino/hardware/Arduino_STM32/Arduino_STM32-master/tools/win/dfu-util.exe",
+    "dfu_library": "libusb0.dll",
+    "runtime_notes": [
+        "Maple Loader and jssc are unchanged from the supplied approved Arduino STM32 runtime.",
+        "The legacy dfu-util.exe and libusb0.dll are bundled from the supplied Arduino STM32 Windows tools.",
+        "The supplied Arduino Java runtime is bundled so the updater does not depend on an installed Arduino environment or system Java.",
+        "The upload command contract remains COM port, ALT ID 2, DFU ID 1EAF:003, firmware path.",
+        "Post-upload USB re-enumeration is verified by UploadService after Maple Loader exits."
+    ],
+    "driver_required_files": [
+        "drivers/win/install_drivers.bat",
+        "drivers/win/install_STM_COM_drivers.bat",
+        "drivers/win/wdi-simple.exe"
+    ],
+    "driver_source": "Arduino/hardware/Arduino_STM32/Arduino_STM32-master/drivers/win",
+    "driver_devices": [
+        {
+            "name": "Maple DFU",
+            "vid": "1EAF",
+            "pid": "0003"
+        },
+        {
+            "name": "Maple Serial",
+            "vid": "1EAF",
+            "pid": "0004"
+        },
+        {
+            "name": "STM Serial",
+            "vid": "0483",
+            "pid": "5740"
+        }
+    ],
+    "java_vm_library": "java/bin/client/jvm.dll"
 }

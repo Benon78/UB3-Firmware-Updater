@@ -69,6 +69,11 @@ assert validation.valid, (
 
 print("[PASS] Bundled Maple runtime validated")
 
+for required in ("dfu-util.exe", "libusb-1.0.dll"):
+    assert (resolved.parent / required).is_file(), required
+    print(f"[PASS] Bundled {required} exists")
+
+
 
 assert service.uploader_path == configured
 print("[PASS] UploadService stores bundled uploader path")
