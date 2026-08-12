@@ -12,24 +12,26 @@ are explicitly shown as "Not reported" rather than invented.
 from __future__ import annotations
 
 from PySide6.QtWidgets import (
-    QFrame,
     QGridLayout,
     QLabel,
     QVBoxLayout,
 )
 
 from ub3_updater.models.device import Device
-from ub3_updater.themes.light_theme import (
+from ub3_updater.widgets.components import UB3Card, UB3InfoRow, UB3SectionHeader
+from ub3_updater.themes.design_system import (
     BORDER,
-    CARD,
     INFO_BACKGROUND,
     PRIMARY_DARK,
     TEXT,
     TEXT_SECONDARY,
+    SURFACE,
+    SPACE_3,
+    SPACE_4,
 )
 
 
-class DeviceInformationWidget(QFrame):
+class DeviceInformationWidget(UB3Card):
     """Display structured UB3 device information."""
 
     def __init__(self, parent=None):
@@ -42,47 +44,46 @@ class DeviceInformationWidget(QFrame):
         self.set_disconnected()
 
     def _build_ui(self):
+        """Build the operator-facing device information card.
+
+        The widget remains presentation-only. The existing value-label
+        dictionary is intentionally preserved for backwards-compatible
+        GUI tests and callers.
+        """
+        self.setObjectName("deviceInformationCard")
         self.setStyleSheet(
             f"""
             QFrame#deviceInformationCard {{
-                background: {CARD};
+                background: {SURFACE};
                 border: 1px solid {BORDER};
-                border-radius: 8px;
+                border-radius: 10px;
             }}
             """
         )
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(18, 16, 18, 16)
-        outer.setSpacing(10)
+        outer.setSpacing(SPACE_3)
 
-        title = QLabel("Device Information")
-        title.setStyleSheet(
-            f"""
-            color: {PRIMARY_DARK};
-            font-size: 14pt;
-            font-weight: 700;
-            border: none;
-            """
+        header = UB3SectionHeader(
+            "Device Information",
+            "Information detected from the connected UB3.",
         )
-        outer.addWidget(title)
+        outer.addWidget(header)
 
         subtitle = QLabel(
-            "Information detected from the connected UB3."
+            "Only information reported by the current USB device is displayed."
         )
         subtitle.setWordWrap(True)
         subtitle.setStyleSheet(
-            f"""
-            color: {TEXT_SECONDARY};
-            border: none;
-            """
+            f"color: {TEXT_SECONDARY}; border: none;"
         )
         outer.addWidget(subtitle)
 
         grid = QGridLayout()
-        grid.setHorizontalSpacing(18)
-        grid.setVerticalSpacing(8)
-        grid.setColumnMinimumWidth(0, 125)
+        grid.setHorizontalSpacing(16)
+        grid.setVerticalSpacing(7)
+        grid.setColumnMinimumWidth(0, 135)
         grid.setColumnStretch(1, 1)
 
         fields = (
@@ -100,44 +101,15 @@ class DeviceInformationWidget(QFrame):
         )
 
         for row, (key, caption) in enumerate(fields):
-            caption_label = QLabel(caption)
-            caption_label.setStyleSheet(
-                f"""
-                color: {TEXT_SECONDARY};
-                font-weight: 600;
-                border: none;
-                """
-            )
-
-            value_label = QLabel("Not reported")
-            value_label.setWordWrap(True)
-            value_label.setTextInteractionFlags(
-                value_label.textInteractionFlags()
-                | value_label.textInteractionFlags()
-            )
-            value_label.setStyleSheet(
-                f"""
-                QLabel {{
-                    color: {TEXT};
-                    background: {INFO_BACKGROUND};
-                    border: 1px solid #DBEAFE;
-                    border-radius: 5px;
-                    padding: 5px 8px;
-                }}
-                """
-            )
-
-            self._value_labels[key] = value_label
-
-            grid.addWidget(caption_label, row, 0)
-            grid.addWidget(value_label, row, 1)
+            info_row = UB3InfoRow(caption, "Not reported")
+            self._value_labels[key] = info_row._value
+            grid.addWidget(info_row, row, 0, 1, 2)
 
         outer.addLayout(grid)
 
         note = QLabel(
-            "Firmware and bootloader versions are shown when "
-            "reported by the device. USB detection alone does "
-            "not read application firmware metadata."
+            "Firmware and bootloader versions are shown when reported by the device. "
+            "USB detection alone does not read application firmware metadata."
         )
         note.setWordWrap(True)
         note.setStyleSheet(

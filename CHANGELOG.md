@@ -1,3 +1,28 @@
+## Step 6.4 test correction
+
+- Updated the Step 6.4 `ControllerStub` to implement the existing MainWindow controller callback registration contract.
+- No production architecture or device/upload behavior changed.
+
+## Step 6.4 — Device Information UI
+
+- Redesigned the Device Information card using reusable UB3 presentation components.
+- Preserved the existing Device model and all device-information contracts.
+- Preserved the rule that unavailable firmware, bootloader, hardware, board, and device-type values are shown as `Not reported`.
+- Added a horizontally scrollable Connection Status content area for narrow Home page layouts.
+- Horizontal scrolling is enabled only when required; vertical scrolling is disabled for the connection-status strip.
+- No device detection, firmware, worker, upload, or Maple architecture changes.
+
+## Step 6.3 — Home / Connect UI
+
+- Redesigned the Home page connection presentation using the Step 6 design system.
+- Added a clear operator-facing device connection status and contextual connection hint.
+- Added semantic Connected / Disconnected status presentation.
+- Preserved automatic COM-port detection and existing device/controller data flow.
+- Preserved the existing two-column independent-scroll HomePage architecture.
+- Preserved existing GUI object names and controller/worker/upload contracts.
+- Added Step 6.3 Home / Connect UI regression coverage.
+- No physical UB3 was programmed.
+
 ## Step 6.1 follow-up — GUI action-button application fix
 
 - Applied the Step 6.1 UB3 primary/secondary styles directly to the Dashboard update and cancel buttons.

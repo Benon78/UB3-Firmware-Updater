@@ -44,6 +44,24 @@ from ub3_updater.widgets.instruction_widget import (
     InstructionWidget,
 )
 from ub3_updater.widgets.logo_widget import LogoWidget
+from ub3_updater.widgets.components import (
+    UB3Card,
+    UB3SectionHeader,
+    UB3StatusBadge,
+)
+from ub3_updater.themes.design_system import (
+    BACKGROUND,
+    SURFACE,
+    BORDER,
+    TEXT,
+    TEXT_SECONDARY,
+    PRIMARY,
+    SPACE_2,
+    SPACE_3,
+    SPACE_4,
+    SPACE_5,
+    CARD_RADIUS,
+)
 
 
 class HomePage(BasePage):
@@ -77,14 +95,46 @@ class HomePage(BasePage):
         self.main_layout.setSpacing(12)
 
         # ----------------------------------------------
-        # Application heading
+        # Application heading / operator status
         # ----------------------------------------------
 
         self.logo_widget = LogoWidget()
+        self.logo_widget.setObjectName("homeBrandHeader")
         self.logo_widget.setMinimumHeight(82)
-        self.add_widget(
-            self.logo_widget
+        self.add_widget(self.logo_widget)
+
+        # Compact workflow status directly under the application
+        # heading. This is presentation-only; controller state remains
+        # the single source of truth.
+        self.home_status_row = QWidget()
+        self.home_status_row.setObjectName("homeStatusRow")
+        status_layout = QHBoxLayout(self.home_status_row)
+        status_layout.setContentsMargins(2, 0, 2, 0)
+        status_layout.setSpacing(SPACE_3)
+
+        self.home_status_title = QLabel("Device Connection")
+        self.home_status_title.setStyleSheet(
+            f"color: {TEXT}; font-size: 11pt; font-weight: 700; border: none;"
         )
+        status_layout.addWidget(self.home_status_title)
+
+        self.home_status_badge = UB3StatusBadge(
+            "Waiting for UB3",
+            status="neutral",
+        )
+        self.home_status_badge.setMinimumWidth(120)
+        status_layout.addWidget(self.home_status_badge)
+
+        self.home_status_hint = QLabel(
+            "Connect a UB3 device by USB to begin."
+        )
+        self.home_status_hint.setStyleSheet(
+            f"color: {TEXT_SECONDARY}; border: none;"
+        )
+        status_layout.addWidget(self.home_status_hint)
+        status_layout.addStretch()
+
+        self.add_widget(self.home_status_row)
 
         # ----------------------------------------------
         # Main two-column area
@@ -171,6 +221,9 @@ class HomePage(BasePage):
 
         self.left_scroll_area = QScrollArea()
         self.left_scroll_area.setObjectName("leftHomeScrollArea")
+        self.left_scroll_area.setStyleSheet(
+            f"QScrollArea#leftHomeScrollArea {{ background: {BACKGROUND}; border: none; }}"
+        )
         self.left_scroll_area.setWidgetResizable(True)
         self.left_scroll_area.setFrameShape(QScrollArea.Shape.NoFrame)
         self.left_scroll_area.setHorizontalScrollBarPolicy(
@@ -187,6 +240,9 @@ class HomePage(BasePage):
 
         self.right_scroll_area = QScrollArea()
         self.right_scroll_area.setObjectName("rightHomeScrollArea")
+        self.right_scroll_area.setStyleSheet(
+            f"QScrollArea#rightHomeScrollArea {{ background: {BACKGROUND}; border: none; }}"
+        )
         self.right_scroll_area.setWidgetResizable(True)
         self.right_scroll_area.setFrameShape(QScrollArea.Shape.NoFrame)
         self.right_scroll_area.setHorizontalScrollBarPolicy(
@@ -289,6 +345,20 @@ class HomePage(BasePage):
             device
         )
 
+        if device is None or not device.connected:
+            self.home_status_badge.setText("Waiting for UB3")
+            self.home_status_badge.set_status("neutral")
+            self.home_status_hint.setText(
+                "Connect a UB3 device by USB to begin."
+            )
+        else:
+            self.home_status_badge.setText("UB3 Connected")
+            self.home_status_badge.set_status("success")
+            com = device.com_port or "USB"
+            self.home_status_hint.setText(
+                f"Device detected on {com}. Ready for firmware selection."
+            )
+
         self._refresh_button_state()
 
     # ==================================================
@@ -305,6 +375,31 @@ class HomePage(BasePage):
             message,
             self.controller.can_update,
         )
+
+        state_name = state.value
+        if state in (
+            UpdateControllerState.SUCCESS,
+            UpdateControllerState.SUCCESS_WITH_WARNING,
+        ):
+            self.home_status_badge.setText(state_name)
+            self.home_status_badge.set_status(
+                "success" if state == UpdateControllerState.SUCCESS else "warning"
+            )
+        elif state in (
+            UpdateControllerState.FAILED,
+            UpdateControllerState.ERROR,
+        ):
+            self.home_status_badge.setText(state_name)
+            self.home_status_badge.set_status("error")
+        elif state == UpdateControllerState.UPLOADING:
+            self.home_status_badge.setText("Uploading")
+            self.home_status_badge.set_status("warning")
+        elif state == UpdateControllerState.READY:
+            self.home_status_badge.setText("Ready")
+            self.home_status_badge.set_status("success")
+        else:
+            self.home_status_badge.setText("Waiting for UB3")
+            self.home_status_badge.set_status("neutral")
 
         self._refresh_button_state()
 

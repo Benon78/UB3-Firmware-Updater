@@ -9,11 +9,17 @@ from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
+    QScrollArea,
     QVBoxLayout,
+    QSizePolicy,
+    QWidget,
 )
 
 from ub3_updater.models.device import Device
-from ub3_updater.widgets.components import UB3Button
+from ub3_updater.widgets.components import (
+    UB3Button,
+    UB3StatusBadge,
+)
 from ub3_updater.widgets.action_button_style import REFRESH_BUTTON_STYLE
 from ub3_updater.themes.light_theme import (
     CARD,
@@ -50,27 +56,53 @@ class ConnectionStatusWidget(QFrame):
             QFrame#connectionStatusCard {{
                 background: {CARD};
                 border: 1px solid {BORDER};
-                border-radius: 8px;
+                border-radius: 10px;
+            }}
+            QScrollArea#connectionStatusScroll {{
+                background: transparent;
+                border: none;
             }}
             """
         )
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(18, 16, 18, 16)
-        layout.setSpacing(10)
+        layout.setSpacing(8)
 
         title = QLabel("Connection Status")
         title.setStyleSheet(
             f"""
             color: {TEXT};
             font-size: 14pt;
-            font-weight: 600;
+            font-weight: 700;
             border: none;
             """
         )
         layout.addWidget(title)
 
-        row = QHBoxLayout()
+        self.connection_status_scroll = QScrollArea()
+        self.connection_status_scroll.setObjectName("connectionStatusScroll")
+        self.connection_status_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        self.connection_status_scroll.setWidgetResizable(False)
+        self.connection_status_scroll.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAsNeeded
+        )
+        self.connection_status_scroll.setVerticalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+        self.connection_status_scroll.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Fixed,
+        )
+        self.connection_status_scroll.setFixedHeight(58)
+
+        content = QWidget()
+        content.setObjectName("connectionStatusScrollContent")
+        content.setMinimumWidth(520)
+        content.setFixedHeight(48)
+
+        row = QHBoxLayout(content)
+        row.setContentsMargins(0, 2, 0, 2)
         row.setSpacing(8)
 
         self.status_dot = QLabel("●")
@@ -90,7 +122,13 @@ class ConnectionStatusWidget(QFrame):
             """
         )
         row.addWidget(self.status_label)
-        row.addStretch()
+
+        self.connection_badge = UB3StatusBadge(
+            "Disconnected",
+            status="error",
+        )
+        self.connection_badge.setMinimumWidth(100)
+        row.addWidget(self.connection_badge)
 
         self.com_badge = QLabel("--")
         self.com_badge.setAlignment(Qt.AlignCenter)
@@ -119,7 +157,9 @@ class ConnectionStatusWidget(QFrame):
         )
         row.addWidget(self.refresh_button)
 
-        layout.addLayout(row)
+        row.addStretch(1)
+        self.connection_status_scroll.setWidget(content)
+        layout.addWidget(self.connection_status_scroll)
 
         self.device_label = QLabel()
         self.vid_pid_label = QLabel()
@@ -138,11 +178,14 @@ class ConnectionStatusWidget(QFrame):
             )
             layout.addWidget(label)
 
+
     def set_disconnected(self):
         self.status_dot.setStyleSheet(
             f"color: {ERROR}; font-size: 16pt; border: none;"
         )
         self.status_label.setText("No Device Detected")
+        self.connection_badge.setText("Disconnected")
+        self.connection_badge.set_status("error")
         self.com_badge.setText("--")
         self.device_label.setText("Device: --")
         self.vid_pid_label.setText("VID:PID: --")
@@ -161,6 +204,8 @@ class ConnectionStatusWidget(QFrame):
             f"color: {SUCCESS}; font-size: 16pt; border: none;"
         )
         self.status_label.setText("UB3 Connected")
+        self.connection_badge.setText("Connected")
+        self.connection_badge.set_status("success")
 
         self.com_badge.setText(
             device.com_port or "--"
@@ -198,6 +243,8 @@ class ConnectionStatusWidget(QFrame):
             f"color: {SUCCESS}; font-size: 16pt; border: none;"
         )
         self.status_label.setText("UB3 Connected")
+        self.connection_badge.setText("Connected")
+        self.connection_badge.set_status("success")
         self.com_badge.setText(com_port or "--")
         self.device_label.setText(
             f"Device: {board or '--'}"
