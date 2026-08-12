@@ -1,3 +1,12 @@
+## Step 6.5 — Firmware Selection UI
+
+- Improve firmware-selection presentation using reusable UB3 UI components.
+- Add structured firmware details card and semantic validation badge.
+- Preserve real `Firmware` model selection and repository paths.
+- Preserve existing firmware dropdown object contract and upload architecture.
+- Add dedicated Step 6.5 GUI regression coverage.
+- No firmware binaries or Maple upload behavior changed.
+
 ## Step 6.4 test correction
 
 - Updated the Step 6.4 `ControllerStub` to implement the existing MainWindow controller callback registration contract.

@@ -27,7 +27,13 @@ from PySide6.QtWidgets import (
 from ub3_updater.models.firmware import Firmware
 from ub3_updater.models.upload_result import UploadResult
 from ub3_updater.themes.design_system import COMBO_BOX_STYLE
-from ub3_updater.widgets.components import UB3Button, UB3ComboBox
+from ub3_updater.widgets.components import (
+    UB3Button,
+    UB3ComboBox,
+    UB3Card,
+    UB3StatusBadge,
+    UB3SectionHeader,
+)
 from ub3_updater.themes.light_theme import (
     BORDER,
     CARD,
@@ -284,20 +290,13 @@ class DashboardWidget(QFrame):
         # Firmware selector
         # -------------------------------------------------
 
-        firmware_title = QLabel(
-            "Selected Firmware"
-        )
-
-        firmware_title.setStyleSheet(
-            f"""
-            font-weight: 600;
-            color: {TEXT};
-            border: none;
-            """
+        firmware_header = UB3SectionHeader(
+            "Firmware Selection",
+            "Select the firmware package to program onto the connected UB3.",
         )
 
         layout.addWidget(
-            firmware_title
+            firmware_header
         )
 
         self.firmware_combo = UB3ComboBox()
@@ -317,12 +316,71 @@ class DashboardWidget(QFrame):
             self.firmware_combo
         )
 
+        self.firmware_details_card = UB3Card(
+            object_name="firmwareDetailsCard"
+        )
+
+        details_layout = QVBoxLayout(
+            self.firmware_details_card
+        )
+
+        details_layout.setContentsMargins(
+            12,
+            10,
+            12,
+            10,
+        )
+
+        details_layout.setSpacing(6)
+
+        details_header = QHBoxLayout()
+        details_header.setSpacing(8)
+
+        details_title = QLabel(
+            "Firmware Details"
+        )
+
+        details_title.setStyleSheet(
+            f"""
+            color: {TEXT};
+            font-weight: 700;
+            border: none;
+            """
+        )
+
+        details_header.addWidget(
+            details_title
+        )
+
+        details_header.addStretch()
+
+        self.firmware_validation_badge = UB3StatusBadge(
+            "Not selected",
+            "neutral",
+        )
+
+        self.firmware_validation_badge.setObjectName(
+            "firmwareValidationBadge"
+        )
+
+        details_header.addWidget(
+            self.firmware_validation_badge
+        )
+
+        details_layout.addLayout(
+            details_header
+        )
+
         self.firmware_info = QLabel(
             "No firmware selected"
         )
 
         self.firmware_info.setWordWrap(
             True
+        )
+
+        self.firmware_info.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse
         )
 
         self.firmware_info.setStyleSheet(
@@ -333,8 +391,12 @@ class DashboardWidget(QFrame):
             """
         )
 
-        layout.addWidget(
+        details_layout.addWidget(
             self.firmware_info
+        )
+
+        layout.addWidget(
+            self.firmware_details_card
         )
 
         # -------------------------------------------------
@@ -756,6 +818,13 @@ class DashboardWidget(QFrame):
                 "No firmware selected"
             )
 
+            self.firmware_validation_badge.setText(
+                "Not selected"
+            )
+            self.firmware_validation_badge.set_status(
+                "neutral"
+            )
+
             return
 
         firmware = (
@@ -794,11 +863,28 @@ class DashboardWidget(QFrame):
             or "--"
         )
 
+        file_valid = firmware.is_valid_file()
+
         file_status = (
             "File OK"
-            if firmware.is_valid_file()
+            if file_valid
             else "File validation required"
         )
+
+        if file_valid:
+            self.firmware_validation_badge.setText(
+                "Validated"
+            )
+            self.firmware_validation_badge.set_status(
+                "success"
+            )
+        else:
+            self.firmware_validation_badge.setText(
+                "Validation required"
+            )
+            self.firmware_validation_badge.set_status(
+                "warning"
+            )
 
         checksum_status = (
             f"{firmware.checksum_algorithm}: configured"
