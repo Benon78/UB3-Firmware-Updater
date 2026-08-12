@@ -14,13 +14,11 @@ from __future__ import annotations
 from PySide6.QtCore import Qt, Signal, QRectF
 from PySide6.QtGui import QColor, QPainter, QPen, QFont
 from PySide6.QtWidgets import (
-    QComboBox,
     QFrame,
     QHBoxLayout,
     QLabel,
     QPlainTextEdit,
     QProgressBar,
-    QPushButton,
     QSizePolicy,
     QVBoxLayout,
     QWidget,
@@ -29,10 +27,7 @@ from PySide6.QtWidgets import (
 from ub3_updater.models.firmware import Firmware
 from ub3_updater.models.upload_result import UploadResult
 from ub3_updater.themes.design_system import COMBO_BOX_STYLE
-from ub3_updater.widgets.action_button_style import (
-    UPDATE_BUTTON_STYLE,
-    CANCEL_BUTTON_STYLE,
-)
+from ub3_updater.widgets.components import UB3Button, UB3ComboBox
 from ub3_updater.themes.light_theme import (
     BORDER,
     CARD,
@@ -305,15 +300,11 @@ class DashboardWidget(QFrame):
             firmware_title
         )
 
-        self.firmware_combo = QComboBox()
+        self.firmware_combo = UB3ComboBox()
 
         self.firmware_combo.setObjectName(
             "firmwareCombo"
         )
-        self.firmware_combo.setStyleSheet(
-            COMBO_BOX_STYLE
-        )
-
         self.firmware_combo.setMinimumHeight(
             42
         )
@@ -619,16 +610,13 @@ class DashboardWidget(QFrame):
 
         buttons.addStretch()
 
-        self.cancel_button = QPushButton(
-            "Cancel"
+        self.cancel_button = UB3Button(
+            "Cancel",
+            variant="secondary",
         )
 
         self.cancel_button.setObjectName(
             "cancelButton"
-        )
-
-        self.cancel_button.setStyleSheet(
-            CANCEL_BUTTON_STYLE
         )
 
         self.cancel_button.setEnabled(
@@ -643,16 +631,13 @@ class DashboardWidget(QFrame):
             self.cancel_button
         )
 
-        self.update_button = QPushButton(
-            "UPDATE"
+        self.update_button = UB3Button(
+            "UPDATE",
+            variant="primary",
         )
 
         self.update_button.setObjectName(
             "updateButton"
-        )
-
-        self.update_button.setStyleSheet(
-            UPDATE_BUTTON_STYLE
         )
 
         self.update_button.setMinimumWidth(
