@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 
 from PySide6.QtCore import Qt
 
+from ub3_updater.services.config_service import ConfigService
 from ub3_updater.themes.light_theme import (
     BORDER,
     TEXT_SECONDARY,
@@ -50,7 +51,7 @@ class FooterWidget(QWidget):
 
         # -------------------------------------
 
-        self.version_label = QLabel("Version 0.1.0-dev")
+        self.version_label = QLabel(f"v{ConfigService.application_version()}")
 
         self.version_label.setStyleSheet(f"""
             color:{TEXT_SECONDARY};

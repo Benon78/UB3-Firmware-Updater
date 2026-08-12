@@ -1,3 +1,25 @@
+## Step 6.1 follow-up — GUI action-button application fix
+
+- Applied the Step 6.1 UB3 primary/secondary styles directly to the Dashboard update and cancel buttons.
+- Preserved existing button object names and controller/worker behavior.
+- No upload, device-detection, firmware, or Maple architecture changes.
+
+## 2026-08-12 — Step 6.1 Started: GUI Design System Foundation
+
+### GUI foundation
+- Reviewed and preserved the Step 5.5 GUI/controller/service/worker architecture.
+- Added a centralized UB3 GUI design-system module for semantic colors, spacing, typography, radii, control dimensions, cards, buttons, and firmware dropdown styling.
+- Kept hardware detection, firmware discovery, upload orchestration, workers, and Maple command execution unchanged.
+- Applied explicit UB3 styling directly to the firmware dropdown and operator action buttons so native Qt rendering cannot replace the intended background/border treatment.
+- Centralized application-version display through `ConfigService` instead of hardcoded GUI footer/version strings.
+- Added a Step 6.1 GUI design-system regression test.
+- Extended the full regression runner to include the Step 6.1 test.
+
+### Scope
+- Step 6.1 is presentation-only.
+- Home-page layout, device card redesign, firmware card redesign, progress/result redesign, and full UI/UX integration remain subsequent Step 6 deliverables.
+- `README.md` remains unchanged; milestone history is recorded only in `CHANGELOG.md`.
+
 ## 2026-08-12 — Step 5.5 Baseline: Version 0.5.5
 
 - Established the complete Step 5.5 codebase as the baseline after the full regression suite passed 17/17.

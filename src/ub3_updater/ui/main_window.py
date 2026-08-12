@@ -29,6 +29,7 @@ from ub3_updater.controllers.update_controller import (
 )
 from ub3_updater.models.device import Device
 from ub3_updater.models.upload_result import UploadResult
+from ub3_updater.services.config_service import ConfigService
 from ub3_updater.services.firmware_service import (
     FirmwareService,
 )
@@ -226,7 +227,7 @@ class MainWindow(QMainWindow):
         )
 
         self.version_label = QLabel(
-            "v0.5.5"
+            f"v{ConfigService.application_version()}"
         )
         self.version_label.setStyleSheet(
             f"color: {TEXT_SECONDARY}; border: none;"

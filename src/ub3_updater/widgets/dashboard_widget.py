@@ -28,6 +28,11 @@ from PySide6.QtWidgets import (
 
 from ub3_updater.models.firmware import Firmware
 from ub3_updater.models.upload_result import UploadResult
+from ub3_updater.themes.design_system import COMBO_BOX_STYLE
+from ub3_updater.widgets.action_button_style import (
+    UPDATE_BUTTON_STYLE,
+    CANCEL_BUTTON_STYLE,
+)
 from ub3_updater.themes.light_theme import (
     BORDER,
     CARD,
@@ -304,6 +309,9 @@ class DashboardWidget(QFrame):
 
         self.firmware_combo.setObjectName(
             "firmwareCombo"
+        )
+        self.firmware_combo.setStyleSheet(
+            COMBO_BOX_STYLE
         )
 
         self.firmware_combo.setMinimumHeight(
@@ -619,6 +627,10 @@ class DashboardWidget(QFrame):
             "cancelButton"
         )
 
+        self.cancel_button.setStyleSheet(
+            CANCEL_BUTTON_STYLE
+        )
+
         self.cancel_button.setEnabled(
             False
         )
@@ -637,6 +649,10 @@ class DashboardWidget(QFrame):
 
         self.update_button.setObjectName(
             "updateButton"
+        )
+
+        self.update_button.setStyleSheet(
+            UPDATE_BUTTON_STYLE
         )
 
         self.update_button.setMinimumWidth(

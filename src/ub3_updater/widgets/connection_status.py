@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
 )
 
 from ub3_updater.models.device import Device
+from ub3_updater.widgets.action_button_style import REFRESH_BUTTON_STYLE
 from ub3_updater.themes.light_theme import (
     CARD,
     BORDER,
@@ -111,6 +112,7 @@ class ConnectionStatusWidget(QFrame):
         self.refresh_button = QPushButton("Refresh")
         self.refresh_button.setToolTip("Refresh device detection")
         self.refresh_button.setObjectName("refreshButton")
+        self.refresh_button.setStyleSheet(REFRESH_BUTTON_STYLE)
         self.refresh_button.setMinimumHeight(38)
         self.refresh_button.setMinimumWidth(90)
         self.refresh_button.clicked.connect(

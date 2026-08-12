@@ -120,6 +120,18 @@ class ConfigService:
             cls.APP_CONFIG
         )
 
+    @classmethod
+    def application_version(cls) -> str:
+        """Return the single configured application version."""
+        application = cls.app().get("application", {})
+        return str(application.get("version", "" )).strip()
+
+    @classmethod
+    def application_name(cls) -> str:
+        """Return the configured application name."""
+        application = cls.app().get("application", {})
+        return str(application.get("name", "UB3 Firmware Updater")).strip()
+
     # =====================================================
     # Settings
     # =====================================================

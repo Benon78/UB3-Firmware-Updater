@@ -11,30 +11,13 @@ Neutral       #6B7280
 Background    #F3F4F6
 """
 
-PRIMARY = "#2563EB"
-PRIMARY_DARK = "#1E3A8A"
-
-SUCCESS = "#10B981"
-WARNING = "#F59E0B"
-ERROR = "#EF4444"
-NEUTRAL = "#6B7280"
-
-BACKGROUND = "#F3F4F6"
-CARD = "#FFFFFF"
-
-TEXT = "#111827"
-TEXT_SECONDARY = "#6B7280"
-BORDER = "#E5E7EB"
-
-INFO_BACKGROUND = "#EFF6FF"
-SUCCESS_BACKGROUND = "#ECFDF5"
-WARNING_BACKGROUND = "#FFFBEB"
-ERROR_BACKGROUND = "#FEF2F2"
-
-WINDOW_RADIUS = 10
-CARD_RADIUS = 8
-BUTTON_RADIUS = 6
-FONT = "Segoe UI"
+from ub3_updater.themes.design_system import (
+    PRIMARY, PRIMARY_DARK, PRIMARY_HOVER, PRIMARY_PRESSED,
+    SUCCESS, WARNING, ERROR, NEUTRAL,
+    BACKGROUND, SURFACE as CARD, TEXT, TEXT_SECONDARY, BORDER,
+    INFO_BACKGROUND, SUCCESS_BACKGROUND, WARNING_BACKGROUND,
+    ERROR_BACKGROUND, CARD_RADIUS, BUTTON_RADIUS, FONT_FAMILY as FONT,
+)
 
 STYLE = f"""
 QMainWindow {{
@@ -169,23 +152,48 @@ QPushButton[class="danger"] {{
 
 QComboBox,
 QLineEdit {{
-    background: white;
-    border: 1px solid {BORDER};
+    background: {CARD};
+    color: {TEXT};
+    border: 1px solid #D1D5DB;
     border-radius: {BUTTON_RADIUS}px;
-    padding: 7px 10px;
-    min-height: 22px;
+    padding: 0 12px;
+    min-height: 40px;
+    font-family: "{FONT}";
+    font-weight: 600;
+}}
+
+QComboBox:hover {{
+    border-color: {PRIMARY};
 }}
 
 QComboBox:focus,
 QLineEdit:focus {{
     border: 2px solid {PRIMARY};
 }}
+
+QComboBox::drop-down {{
+    width: 30px;
+    border-left: 1px solid {BORDER};
+    background: #F9FAFB;
+}}
+
 QComboBox QAbstractItemView {{
-    background: white;
+    background: {CARD};
     color: {TEXT};
-    border: 1px solid {BORDER};
+    border: 1px solid #D1D5DB;
     selection-background-color: {PRIMARY};
     selection-color: white;
+    padding: 4px;
+}}
+
+QComboBox QAbstractItemView::item {{
+    min-height: 34px;
+    padding: 7px 10px;
+}}
+
+QComboBox QAbstractItemView::item:hover {{
+    background: {INFO_BACKGROUND};
+    color: {PRIMARY_DARK};
 }}
 
 QComboBox:disabled {{
