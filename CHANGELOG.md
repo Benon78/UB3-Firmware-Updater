@@ -1,3 +1,40 @@
+## Step 6.7 — Success / Warning / Failure UX
+
+- Add a reusable terminal result banner to the update dashboard.
+- Present success, success-with-warning, failure, and cancelled outcomes using semantic UI states.
+- Preserve existing UploadResult interpretation and upload architecture.
+- Clear the terminal result banner when a new upload starts.
+- Add dedicated Step 6.7 GUI regression coverage.
+- No firmware, Maple, device detection, worker, or upload execution changes.
+
+## Step 6.6.1 test correction
+
+- Align worker lifecycle regression coverage with the existing architecture: upload completion and worker reset are owned by `HomePage`.
+- Preserve `MainWindow` as the top-level GUI container; no lifecycle responsibility was moved into it.
+- Correct escaped lifecycle docstring delimiters in `HomePage`.
+
+## Step 6.6.1 follow-up — safe UploadWorker reset
+
+- Added GUI-side terminal worker reset polling after UploadResult delivery.
+- The existing `UpdateController.reset_worker()` API is used only after the worker stops.
+- Supports repeated firmware updates without restarting the application.
+- No Maple/upload command or firmware architecture changes.
+
+## Step 6.6.1 — UploadWorker lifecycle reusability
+
+- Reset the completed/failed UploadWorker through the existing controller API after the worker thread has actually exited.
+- Prevent the GUI from becoming unable to start a second firmware update in the same application session.
+- Preserve UploadWorker terminal-state protection, UploadService, ProcessRunner, Maple command, device detection, COM detection, and firmware handling.
+- Add regression coverage for sequential updates with different firmware packages.
+
+## Step 6.6 — Upload / Progress UI
+
+- Added operator-facing upload workflow phase indicators.
+- Added explicit post-upload USB re-enumeration / Maple Serial recovery presentation.
+- Preserved workflow-phase progress semantics; no fabricated byte-transfer percentage.
+- Preserved existing UploadWorker, UploadService, ProcessRunner, and Maple command architecture.
+- Added Step 6.6 GUI regression coverage.
+
 ## Step 6.5 — Firmware Selection UI
 
 - Improve firmware-selection presentation using reusable UB3 UI components.

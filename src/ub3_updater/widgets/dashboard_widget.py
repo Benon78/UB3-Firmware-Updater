@@ -33,6 +33,7 @@ from ub3_updater.widgets.components import (
     UB3Card,
     UB3StatusBadge,
     UB3SectionHeader,
+    UB3StatusBanner,
 )
 from ub3_updater.themes.light_theme import (
     BORDER,
@@ -478,6 +479,42 @@ class DashboardWidget(QFrame):
             progress_header
         )
 
+        # -------------------------------------------------
+        # Upload workflow phases
+        #
+        # These are workflow states, not byte-level progress.
+        # The Maple runtime does not expose trustworthy byte
+        # percentages, so the UI deliberately presents the
+        # operator with verified process phases.
+        # -------------------------------------------------
+
+        self.progress_steps = {}
+
+        phases_layout = QHBoxLayout()
+        phases_layout.setContentsMargins(2, 0, 2, 0)
+        phases_layout.setSpacing(4)
+
+        for phase_name in (
+            "Prepare",
+            "Start",
+            "Upload",
+            "Reconnect",
+            "Complete",
+        ):
+            phase_label = QLabel(phase_name)
+            phase_label.setAlignment(
+                Qt.AlignmentFlag.AlignCenter
+            )
+            phase_label.setMinimumHeight(26)
+            phase_label.setSizePolicy(
+                QSizePolicy.Policy.Expanding,
+                QSizePolicy.Policy.Fixed,
+            )
+            self.progress_steps[phase_name] = phase_label
+            phases_layout.addWidget(phase_label)
+
+        progress_layout.addLayout(phases_layout)
+
         progress_center = QHBoxLayout()
         progress_center.addStretch()
 
@@ -571,6 +608,10 @@ class DashboardWidget(QFrame):
             self.progress_hint
         )
 
+        self._update_progress_steps(
+            "Ready"
+        )
+
         layout.addWidget(
             self.progress_card
         )
@@ -593,6 +634,27 @@ class DashboardWidget(QFrame):
 
         layout.addWidget(
             self.status_label
+        )
+
+        # -------------------------------------------------
+        # Result Banner
+        # -------------------------------------------------
+
+        self.result_banner = UB3StatusBanner(
+            "",
+            "info",
+        )
+
+        self.result_banner.setObjectName(
+            "updateResultBanner"
+        )
+
+        self.result_banner.setVisible(
+            False
+        )
+
+        layout.addWidget(
+            self.result_banner
         )
 
         # -------------------------------------------------
@@ -991,6 +1053,9 @@ class DashboardWidget(QFrame):
 
         if uploading:
 
+            # A new upload supersedes the previous terminal result.
+            self.result_banner.setVisible(False)
+
             self._show_progress()
 
             # STARTING/initial controller state.
@@ -1078,6 +1143,18 @@ class DashboardWidget(QFrame):
             phase = "Uploading"
 
         elif (
+            "re-enumerat" in lower
+            or "reconnected" in lower
+            or "maple serial" in lower
+            or "resetting usb" in lower
+            or "usb reset" in lower
+            or "returned to" in lower
+        ):
+
+            value = 92
+            phase = "Reconnecting"
+
+        elif (
             "completed successfully" in lower
             or "transfer completed" in lower
         ):
@@ -1108,6 +1185,101 @@ class DashboardWidget(QFrame):
             100,
         )
 
+    def _update_progress_steps(
+        self,
+        phase: str,
+    ) -> None:
+        """
+        Update the visual upload workflow phases.
+
+        This is deliberately presentation-only. A phase becomes
+        active only when an existing controller/Maple message
+        indicates that phase has been reached.
+        """
+
+        phase_order = {
+            "Ready": 0,
+            "Preparing": 1,
+            "Starting": 2,
+            "Uploading": 3,
+            "Reconnecting": 4,
+            "Finalizing": 4,
+            "Complete": 5,
+            "Failed": -1,
+            "Warning": 5,
+        }
+
+        current = phase_order.get(
+            phase,
+            0,
+        )
+
+        for name, label in self.progress_steps.items():
+            index = {
+                "Prepare": 1,
+                "Start": 2,
+                "Upload": 3,
+                "Reconnect": 4,
+                "Complete": 5,
+            }[name]
+
+            if current == -1:
+                active = False
+                completed = False
+            else:
+                completed = index < current
+                active = index == current
+
+            if completed:
+                label.setText(f"✓ {name}")
+                label.setStyleSheet(
+                    f"""
+                    QLabel {{
+                        color: {SUCCESS};
+                        background: {SUCCESS_BACKGROUND};
+                        border: none;
+                        border-radius: 5px;
+                        padding: 5px 4px;
+                        font-size: 8pt;
+                        font-weight: 700;
+                    }}
+                    """
+                )
+            elif active:
+                label.setText(name)
+                label.setStyleSheet(
+                    f"""
+                    QLabel {{
+                        color: {PRIMARY_DARK};
+                        background: #DBEAFE;
+                        border: 1px solid #93C5FD;
+                        border-radius: 5px;
+                        padding: 5px 4px;
+                        font-size: 8pt;
+                        font-weight: 700;
+                    }}
+                    """
+                )
+            else:
+                label.setText(name)
+                label.setStyleSheet(
+                    f"""
+                    QLabel {{
+                        color: {TEXT_SECONDARY};
+                        background: #F3F4F6;
+                        border: none;
+                        border-radius: 5px;
+                        padding: 5px 4px;
+                        font-size: 8pt;
+                        font-weight: 600;
+                    }}
+                    """
+                )
+
+    # =====================================================
+    # Set Progress
+    # =====================================================
+
     def _set_progress(
         self,
         value: int,
@@ -1116,6 +1288,10 @@ class DashboardWidget(QFrame):
     ):
 
         self._progress_phase = phase
+
+        self._update_progress_steps(
+            phase
+        )
 
         self.progress_bar.setValue(
             max(0, min(100, int(value)))
@@ -1269,6 +1445,20 @@ class DashboardWidget(QFrame):
         self.output.clear()
 
     # =====================================================
+    # Result Presentation
+    # =====================================================
+
+    def _show_result_banner(
+        self,
+        status: str,
+        message: str,
+    ) -> None:
+        """Present the terminal upload outcome without changing upload logic."""
+        self.result_banner.set_status(status)
+        self.result_banner.set_message(message)
+        self.result_banner.setVisible(True)
+
+    # =====================================================
     # Result
     # =====================================================
 
@@ -1304,6 +1494,11 @@ class DashboardWidget(QFrame):
                 ),
             )
 
+            self._show_result_banner(
+                "warning",
+                "Firmware updated, but a post-upload warning requires attention.",
+            )
+
         elif result.success:
 
             self.status_label.setText(
@@ -1322,6 +1517,11 @@ class DashboardWidget(QFrame):
                 ),
             )
 
+            self._show_result_banner(
+                "success",
+                "Firmware updated successfully. UB3 completed the update workflow.",
+            )
+
         elif result.cancelled:
 
             self.status_label.setText(
@@ -1336,6 +1536,11 @@ class DashboardWidget(QFrame):
                 success=False
             )
 
+            self._show_result_banner(
+                "info",
+                "Firmware update was cancelled. No further action was taken.",
+            )
+
         else:
 
             self.status_label.setText(
@@ -1348,6 +1553,11 @@ class DashboardWidget(QFrame):
 
             self._complete_progress(
                 success=False
+            )
+
+            self._show_result_banner(
+                "error",
+                "Firmware update failed. Review the upload log for details.",
             )
 
         self.cancel_button.setEnabled(

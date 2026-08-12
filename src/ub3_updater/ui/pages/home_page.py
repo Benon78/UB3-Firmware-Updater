@@ -7,7 +7,7 @@ Device detection + firmware selection + update dashboard.
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QTimer, Qt
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QSizePolicy,
     QVBoxLayout,
     QWidget,
+    QDialog
 )
 
 from ub3_updater.controllers.update_controller import (
@@ -449,6 +450,39 @@ class HomePage(BasePage):
         )
 
         self._refresh_button_state()
+        self._schedule_worker_reset()
+
+    # ==================================================
+    # Upload Worker Lifecycle
+    # ==================================================
+
+    def _schedule_worker_reset(self) -> None:
+        """
+        Schedule a safe worker reset after a terminal upload result.
+
+        UploadWorker emits its completion callback before its thread has
+        necessarily finished. The controller deliberately refuses to
+        reset a running worker, so the reset is polled from the GUI event
+        loop until the worker is no longer active.
+        """
+        QTimer.singleShot(
+            50,
+            self._reset_worker_when_finished,
+        )
+
+    def _reset_worker_when_finished(self) -> None:
+        """
+        Return UploadWorker to IDLE once its thread has exited.
+        """
+        if self.controller.is_uploading:
+            QTimer.singleShot(
+                50,
+                self._reset_worker_when_finished,
+            )
+            return
+
+        self.controller.reset_worker()
+        self._refresh_button_state()
 
     # ==================================================
     # Actions
@@ -539,7 +573,7 @@ class HomePage(BasePage):
             parent=self.window(),
         )
 
-        if dialog.exec() != dialog.Accepted:
+        if dialog.exec() != QDialog.DialogCode.Accepted:
             self.dashboard_widget.message_label.setText(
                 "Firmware update cancelled."
             )

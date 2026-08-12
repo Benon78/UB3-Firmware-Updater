@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import sys
 
-from PySide6.QtCore import QObject, Signal, Slot
+from PySide6.QtCore import QObject, QTimer, Signal, Slot
 from PySide6.QtWidgets import (
     QApplication,
     QHBoxLayout,
@@ -389,6 +389,13 @@ class MainWindow(QMainWindow):
 
         self._update_header()
 
+        # The UploadWorker emits its completion callback from the
+        # worker thread, before that thread has returned.  Resetting
+        # the worker immediately would therefore race with
+        # UploadWorker.is_running.  Queue a GUI-thread lifecycle check
+        # and reset only after the worker thread has actually finished.
+        self._schedule_worker_reset()
+
     @Slot(str)
     def _on_error(
         self,
@@ -398,9 +405,57 @@ class MainWindow(QMainWindow):
             message
         )
 
-        self.footer_status.setText(
-            message
+        # Unexpected worker exceptions do not emit UploadResult, so
+        # they need the same terminal-worker cleanup path.
+        self._schedule_worker_reset()
+
+    # ==================================================
+    # Upload Worker Lifecycle
+    # ==================================================
+
+    def _schedule_worker_reset(
+        self,
+    ) -> None:
+        """
+        Return a completed UploadWorker to IDLE safely.
+
+        UploadWorker emits completion before its background thread
+        returns.  The reset therefore cannot be performed directly
+        from the callback.  The GUI event loop retries until the
+        worker is no longer running, then delegates the reset to the
+        existing UpdateController.reset_worker() API.
+        """
+
+        QTimer.singleShot(
+            0,
+            self._reset_worker_when_finished,
         )
+
+    def _reset_worker_when_finished(
+        self,
+    ) -> None:
+        """
+        Reset the worker once its execution thread has exited.
+        """
+
+        if self.controller.is_uploading:
+
+            QTimer.singleShot(
+                25,
+                self._reset_worker_when_finished,
+            )
+            return
+
+        reset = getattr(
+            self.controller,
+            "reset_worker",
+            None,
+        )
+
+        if callable(reset):
+            reset()
+
+        self._update_header()
 
     # ==================================================
     # Header
