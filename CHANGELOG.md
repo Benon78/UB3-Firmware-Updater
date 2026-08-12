@@ -1,3 +1,12 @@
+## Step 6.8 — Logs & Diagnostics UI
+
+- Added an operator-facing Upload Diagnostics card for firmware, version, COM port, device state, duration, and process return code.
+- Added Copy, Clear, and Save actions for the visible technical upload log.
+- Preserved the existing raw Maple/upload output without changing upload execution or result interpretation.
+- Kept application file logging separate from the visible GUI log; clearing the GUI log does not delete the application log.
+- Added Step 6.8 GUI regression coverage.
+- No firmware, device detection, UploadWorker, UploadService, ProcessRunner, or Maple command changes.
+
 ## Step 6.7 — Success / Warning / Failure UX
 
 - Add a reusable terminal result banner to the update dashboard.

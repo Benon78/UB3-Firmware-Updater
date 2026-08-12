@@ -11,10 +11,15 @@ so the progress indicator represents verified workflow phases.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from PySide6.QtCore import Qt, Signal, QRectF
 from PySide6.QtGui import QColor, QPainter, QPen, QFont
 from PySide6.QtWidgets import (
+    QApplication,
+    QFileDialog,
     QFrame,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QPlainTextEdit,
@@ -685,24 +690,114 @@ class DashboardWidget(QFrame):
         )
 
         # -------------------------------------------------
-        # Output
+        # Diagnostics summary
         # -------------------------------------------------
 
-        output_title = QLabel(
-            "Upload Log"
+        self.diagnostics_card = UB3Card(
+            object_name="uploadDiagnosticsCard"
         )
 
-        output_title.setStyleSheet(
-            f"""
-            font-weight: 600;
-            color: {TEXT};
-            border: none;
-            """
+        diagnostics_layout = QVBoxLayout(
+            self.diagnostics_card
+        )
+        diagnostics_layout.setContentsMargins(
+            12, 10, 12, 10
+        )
+        diagnostics_layout.setSpacing(8)
+
+        diagnostics_header = QHBoxLayout()
+        diagnostics_title = QLabel("Upload Diagnostics")
+        diagnostics_title.setStyleSheet(
+            f"font-weight: 700; color: {TEXT}; border: none;"
+        )
+        diagnostics_header.addWidget(diagnostics_title)
+        diagnostics_header.addStretch()
+
+        self.diagnostics_badge = UB3StatusBadge(
+            "No completed upload",
+            "neutral",
+        )
+        self.diagnostics_badge.setObjectName(
+            "uploadDiagnosticsBadge"
+        )
+        diagnostics_header.addWidget(self.diagnostics_badge)
+        diagnostics_layout.addLayout(diagnostics_header)
+
+        diagnostics_grid = QGridLayout()
+        diagnostics_grid.setHorizontalSpacing(18)
+        diagnostics_grid.setVerticalSpacing(6)
+
+        self.diagnostic_values = {}
+        diagnostic_fields = (
+            ("Firmware", "firmware"),
+            ("Version", "version"),
+            ("COM Port", "com_port"),
+            ("Device State", "device_state"),
+            ("Duration", "duration"),
+            ("Return Code", "return_code"),
         )
 
-        layout.addWidget(
-            output_title
+        for index, (caption, key) in enumerate(diagnostic_fields):
+            row = index // 3
+            column = (index % 3) * 2
+
+            caption_label = QLabel(caption)
+            caption_label.setStyleSheet(
+                f"color: {TEXT_SECONDARY}; font-size: 8pt; border: none;"
+            )
+
+            value_label = QLabel("Not available")
+            value_label.setTextInteractionFlags(
+                Qt.TextInteractionFlag.TextSelectableByMouse
+            )
+            value_label.setStyleSheet(
+                f"color: {TEXT}; font-weight: 600; border: none;"
+            )
+
+            diagnostics_grid.addWidget(caption_label, row, column)
+            diagnostics_grid.addWidget(value_label, row, column + 1)
+            self.diagnostic_values[key] = value_label
+
+        diagnostics_layout.addLayout(diagnostics_grid)
+        layout.addWidget(self.diagnostics_card)
+
+        # -------------------------------------------------
+        # Technical log
+        # -------------------------------------------------
+
+        log_header = QHBoxLayout()
+        log_title = QLabel("Technical Upload Log")
+        log_title.setStyleSheet(
+            f"font-weight: 600; color: {TEXT}; border: none;"
         )
+        log_header.addWidget(log_title)
+        log_header.addStretch()
+
+        self.copy_log_button = UB3Button(
+            "Copy", variant="secondary"
+        )
+        self.copy_log_button.setObjectName("copyLogButton")
+        self.copy_log_button.setMinimumHeight(32)
+        self.copy_log_button.clicked.connect(self.copy_log)
+        log_header.addWidget(self.copy_log_button)
+
+        self.clear_log_button = UB3Button(
+            "Clear", variant="secondary"
+        )
+        self.clear_log_button.setObjectName("clearLogButton")
+        self.clear_log_button.setMinimumHeight(32)
+        self.clear_log_button.clicked.connect(self.clear_output)
+        log_header.addWidget(self.clear_log_button)
+
+        self.save_log_button = UB3Button(
+            "Save", variant="secondary"
+        )
+        self.save_log_button.setObjectName("saveLogButton")
+        self.save_log_button.setMinimumHeight(32)
+        self.save_log_button.clicked.connect(self.save_log)
+        log_header.addWidget(self.save_log_button)
+
+        layout.addLayout(log_header)
 
         self.output = QPlainTextEdit()
 
@@ -714,12 +809,10 @@ class DashboardWidget(QFrame):
             True
         )
 
-        self.output.setMinimumHeight(
-            120
-        )
+        self.output.setMinimumHeight(140)
 
         self.output.setPlaceholderText(
-            "Upload messages will appear here."
+            "Technical upload messages will appear here."
         )
 
         layout.addWidget(
@@ -1442,7 +1535,73 @@ class DashboardWidget(QFrame):
         )
 
     def clear_output(self):
+        """Clear only the visible technical log; application file logs are preserved."""
         self.output.clear()
+
+    def copy_log(self):
+        """Copy the visible technical upload log to the system clipboard."""
+        QApplication.clipboard().setText(
+            self.output.toPlainText()
+        )
+
+    def save_log(self):
+        """Save the visible technical upload log without altering the application log."""
+        text = self.output.toPlainText()
+        if not text:
+            return
+
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Upload Log",
+            "ub3_upload.log",
+            "Log files (*.log);;Text files (*.txt);;All files (*)",
+        )
+
+        if not file_path:
+            return
+
+        Path(file_path).write_text(
+            text,
+            encoding="utf-8",
+        )
+
+    def _set_diagnostic_value(self, key: str, value: str) -> None:
+        label = self.diagnostic_values.get(key)
+        if label is not None:
+            label.setText(value or "Not available")
+
+    def _update_diagnostics(self, result: UploadResult) -> None:
+        self.diagnostics_badge.setText(result.display_status)
+
+        if result.success and result.has_warning:
+            badge_status = "warning"
+        elif result.success:
+            badge_status = "success"
+        elif result.cancelled:
+            badge_status = "neutral"
+        else:
+            badge_status = "error"
+
+        self.diagnostics_badge.set_status(badge_status)
+
+        self._set_diagnostic_value("firmware", result.firmware_name)
+        self._set_diagnostic_value("version", result.firmware_version)
+        self._set_diagnostic_value("com_port", result.com_port)
+        self._set_diagnostic_value("device_state", result.device_state)
+
+        duration = (
+            f"{result.duration_seconds:.2f} s"
+            if result.duration_seconds
+            else "Not available"
+        )
+        self._set_diagnostic_value("duration", duration)
+
+        return_code = (
+            str(result.return_code)
+            if result.return_code is not None
+            else "Not available"
+        )
+        self._set_diagnostic_value("return_code", return_code)
 
     # =====================================================
     # Result Presentation
@@ -1467,6 +1626,8 @@ class DashboardWidget(QFrame):
         result: UploadResult,
         can_update: bool,
     ):
+
+        self._update_diagnostics(result)
 
         self.message_label.setText(
             result.display_message
