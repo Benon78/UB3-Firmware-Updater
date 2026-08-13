@@ -138,6 +138,91 @@ class HomePage(BasePage):
         self.add_widget(self.home_status_row)
 
         # ----------------------------------------------
+        # Unified workflow summary
+        #
+        # This is a presentation-only summary of the same
+        # controller/device state already used by the page.
+        # It does not introduce a second workflow state machine.
+        # ----------------------------------------------
+
+        self.workflow_summary_card = UB3Card(
+            object_name="workflowSummaryCard"
+        )
+
+        workflow_layout = QVBoxLayout(
+            self.workflow_summary_card
+        )
+        workflow_layout.setContentsMargins(
+            SPACE_3, SPACE_2, SPACE_3, SPACE_2
+        )
+        workflow_layout.setSpacing(SPACE_2)
+
+        workflow_header = UB3SectionHeader(
+            "Update Workflow",
+            "Follow the four operator stages from connection to final result.",
+        )
+        workflow_layout.addWidget(workflow_header)
+
+        workflow_steps_layout = QHBoxLayout()
+        workflow_steps_layout.setContentsMargins(0, 0, 0, 0)
+        workflow_steps_layout.setSpacing(SPACE_2)
+
+        self.workflow_step_widgets = {}
+        workflow_definitions = (
+            ("connect", "1", "Connect", "Waiting"),
+            ("select", "2", "Select", "Select firmware"),
+            ("update", "3", "Update", "Unavailable"),
+            ("result", "4", "Result", "Awaiting result"),
+        )
+
+        for key, number, title, initial in workflow_definitions:
+            step = QWidget()
+            step.setObjectName(f"workflowStep_{key}")
+            step_layout = QVBoxLayout(step)
+            step_layout.setContentsMargins(0, 0, 0, 0)
+            step_layout.setSpacing(3)
+
+            number_label = QLabel(number)
+            number_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            number_label.setStyleSheet(
+                f"color: {TEXT_SECONDARY}; font-size: 8pt; "
+                "font-weight: 700; border: none;"
+            )
+
+            title_label = QLabel(title)
+            title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            title_label.setStyleSheet(
+                f"color: {TEXT}; font-weight: 700; border: none;"
+            )
+
+            badge = UB3StatusBadge(initial, "neutral")
+            badge.setObjectName(f"workflow{key.title()}Badge")
+            badge.setSizePolicy(
+                QSizePolicy.Policy.Expanding,
+                QSizePolicy.Policy.Fixed,
+            )
+
+            step_layout.addWidget(number_label)
+            step_layout.addWidget(title_label)
+            step_layout.addWidget(badge)
+
+            workflow_steps_layout.addWidget(step, 1)
+
+            self.workflow_step_widgets[key] = {
+                "number": number_label,
+                "title": title_label,
+                "badge": badge,
+            }
+
+        workflow_layout.addLayout(workflow_steps_layout)
+        self.add_widget(self.workflow_summary_card)
+
+        # Synchronize the workflow summary once during construction.
+        # This establishes the initial presentation from the controller
+        # state before the firmware refresh/default-selection logic runs.
+        self._update_workflow_summary()
+
+        # ----------------------------------------------
         # Main two-column area
         #
         # Each column owns its own vertical scroll area.
@@ -292,6 +377,77 @@ class HomePage(BasePage):
         self.refresh_firmware()
 
     # ==================================================
+    # Unified Workflow Summary
+    # ==================================================
+
+    def _set_workflow_step(
+        self,
+        key: str,
+        text: str,
+        status: str,
+    ) -> None:
+        step = self.workflow_step_widgets.get(key)
+        if not step:
+            return
+        badge = step["badge"]
+        badge.setText(text)
+        badge.set_status(status)
+
+    def _update_workflow_summary(self) -> None:
+        device = self.controller.device
+        connected = bool(device and device.connected)
+        firmware_selected = self.controller.selected_firmware is not None
+        uploading = self.controller.is_uploading
+        state = self.controller.state
+
+        self._set_workflow_step(
+            "connect",
+            "Connected" if connected else "Waiting",
+            "success" if connected else "neutral",
+        )
+
+        self._set_workflow_step(
+            "select",
+            "Selected" if firmware_selected else "Select firmware",
+            "success" if firmware_selected else "neutral",
+        )
+
+        if uploading or state == UpdateControllerState.UPLOADING:
+            update_text, update_status = "In progress", "warning"
+        elif connected and firmware_selected and self.controller.can_update:
+            update_text, update_status = "Ready", "success"
+        elif connected:
+            update_text, update_status = "Waiting", "neutral"
+        else:
+            update_text, update_status = "Unavailable", "neutral"
+
+        self._set_workflow_step(
+            "update",
+            update_text,
+            update_status,
+        )
+
+        if state == UpdateControllerState.SUCCESS:
+            result_text, result_status = "Success", "success"
+        elif state == UpdateControllerState.SUCCESS_WITH_WARNING:
+            result_text, result_status = "Warning", "warning"
+        elif state in (
+            UpdateControllerState.FAILED,
+            UpdateControllerState.ERROR,
+        ):
+            result_text, result_status = "Failed", "error"
+        elif state == UpdateControllerState.CANCELLED:
+            result_text, result_status = "Cancelled", "neutral"
+        else:
+            result_text, result_status = "Awaiting result", "neutral"
+
+        self._set_workflow_step(
+            "result",
+            result_text,
+            result_status,
+        )
+
+    # ==================================================
     # Firmware
     # ==================================================
 
@@ -361,6 +517,7 @@ class HomePage(BasePage):
             )
 
         self._refresh_button_state()
+        self._update_workflow_summary()
 
     # ==================================================
     # Controller State
@@ -403,6 +560,7 @@ class HomePage(BasePage):
             self.home_status_badge.set_status("neutral")
 
         self._refresh_button_state()
+        self._update_workflow_summary()
 
     def update_status(
         self,
@@ -450,6 +608,7 @@ class HomePage(BasePage):
         )
 
         self._refresh_button_state()
+        self._update_workflow_summary()
         self._schedule_worker_reset()
 
     # ==================================================
@@ -505,6 +664,7 @@ class HomePage(BasePage):
             )
 
         self._refresh_button_state()
+        self._update_workflow_summary()
 
     def _update_requested(self):
         """

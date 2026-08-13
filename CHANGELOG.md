@@ -1,3 +1,24 @@
+## STEP 6.9 — COMPLETE GUI WORKFLOW INTEGRATION
+# STATUS: COMPLETE
+
+- Automated regression: 27/27 PASS
+- Physical validation: 30 UB3 PASS
+- Repeated-update lifecycle: PASS
+- Application restart between updates: NOT REQUIRED
+
+## Step 6.9 test correction
+
+- Corrected the Step 6.9 workflow integration test to mirror the existing controller-as-device-source-of-truth contract before calling `HomePage.update_device()`.
+- No production GUI, controller, firmware, worker, or upload architecture changed.
+
+## Step 6.9 — Complete GUI Workflow Integration
+
+- Added a unified four-stage workflow summary on the Home page: Connect, Select, Update, Result.
+- Connected the workflow summary to the existing `UpdateController` state, selected firmware, device state, and upload result.
+- Preserved the existing two-column Home page and independent vertical scrolling.
+- Preserved existing controller, worker, upload, Maple, firmware, and COM-port architecture.
+- Added Step 6.9 GUI integration regression coverage.
+
 ## Step 6.8 — Logs & Diagnostics UI
 
 - Added an operator-facing Upload Diagnostics card for firmware, version, COM port, device state, duration, and process return code.
